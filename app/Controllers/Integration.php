@@ -537,7 +537,6 @@ class Integration extends BaseController
     public function stream()
     {
         // PENTING: Lepaskan kunci session agar aplikasi tidak freeze/hang
-        // karena stream MJPEG berjalan selamanya.
         if (session_get_cookie_params()) {
             session_write_close();
         }
@@ -545,31 +544,34 @@ class Integration extends BaseController
         $targetUrl = $this->request->getVar('url');
         if (!$targetUrl) return "No URL provided";
 
-        // Pastikan protokol benar
         if (strpos($targetUrl, 'http') !== 0) $targetUrl = 'http://' . $targetUrl;
 
-        // 1. Matikan limit waktu eksekusi PHP agar stream tidak putus tengah jalan
+        // 1. Matikan limit waktu & Buffering
         set_time_limit(0);
-
-        // 2. Set Header khusus MJPEG agar browser tahu ini adalah video stream
+        
+        // Header agar Nginx Proxy Manager / Cloudflare tidak menahan data (Buffering)
+        header('X-Accel-Buffering: no'); 
         header('Content-Type: multipart/x-mixed-replace; boundary=boundarydonotcross');
-        header('Cache-Control: no-cache');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Connection: close');
         header('Pragma: no-cache');
 
-        // 3. Buka koneksi langsung (Pass-through)
-        // Gunakan timeout pada context agar tidak hang jika kamera mati
-        $context = stream_context_create(['http' => ['timeout' => 10]]);
-        $fp = @fopen($targetUrl, 'rb', false, $context);
+        // 2. Buka koneksi langsung
+        $context = stream_context_create(['http' => ['timeout' => 15]]);
+        $fp = fopen($targetUrl, 'rb', false, $context);
 
         if ($fp) {
-            // Bersihkan buffer output sebelum mulai
+            // Matikan kompresi GZIP jika ada karena bisa merusak stream MJPEG
+            if (function_exists('apache_setenv')) {
+                @apache_setenv('no-gzip', 1);
+            }
+            @ini_set('zlib.output_compression', 0);
+
             if (ob_get_level()) ob_end_clean();
 
-            // Alirkan data secara realtime per 8KB
             while (!feof($fp) && connection_status() == 0) {
                 echo fread($fp, 8192);
-                flush(); // Paksa data keluar ke browser saat ini juga
+                flush(); 
             }
             fclose($fp);
         } else {
