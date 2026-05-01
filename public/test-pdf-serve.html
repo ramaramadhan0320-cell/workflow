@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Serve Test</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .test { margin: 20px 0; padding: 10px; border: 1px solid #ddd; }
+        #output { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>PDF Serve-Cached-PDF Test</h1>
+    
+    <div class="test">
+        <h3>Test 1: Direct Fetch to serve-cached-pdf</h3>
+        <button onclick="testDirectFetch()">Run Test</button>
+        <div id="output"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Test 2: List available cache files</h3>
+        <button onclick="listCacheFiles()">List Files</button>
+        <div id="output2"></div>
+    </div>
+
+    <script>
+        async function testDirectFetch() {
+            const out = document.getElementById('output');
+            out.innerHTML = 'Loading...\n';
+            
+            try {
+                // Get a cache filename from server
+                const listRes = await fetch('/payment/debug-nextcloud?filename=test.pdf');
+                const listData = await listRes.json();
+                
+                // Get cache files
+                const cacheDir = await fetch('/api/list-cache');
+                if (cacheDir.ok) {
+                    const files = await cacheDir.json();
+                    if (files.length > 0) {
+                        const testFile = files[0];
+                        const url = `/payment/serve-cached-pdf?file=${encodeURIComponent(testFile)}`;
+                        
+                        out.innerHTML += `Testing URL: ${url}\n\n`;
+                        
+                        const resp = await fetch(url);
+                        
+                        out.innerHTML += `HTTP Status: ${resp.status}\n`;
+                        out.innerHTML += `Headers:\n`;
+                        resp.headers.forEach((value, name) => {
+                            out.innerHTML += `  ${name}: ${value}\n`;
+                        });
+                        
+                        const blob = await resp.blob();
+                        out.innerHTML += `\nBlob size: ${blob.size} bytes\n`;
+                        out.innerHTML += `Blob type: ${blob.type}\n`;
+                        
+                        // Try to create URL and test in img or iframe
+                        const blobUrl = URL.createObjectURL(blob);
+                        out.innerHTML += `Blob URL: ${blobUrl}\n`;
+                    }
+                }
+            } catch (err) {
+                out.innerHTML += `Error: ${err.message}\n`;
+                console.error(err);
+            }
+        }
+        
+        async function listCacheFiles() {
+            const out = document.getElementById('output2');
+            out.innerHTML = 'Loading...\n';
+            
+            try {
+                const response = await fetch('/get-cache-files');
+                if (!response.ok) {
+                    out.innerHTML = `Failed to fetch cache files (HTTP ${response.status})\n`;
+                    return;
+                }
+                const files = await response.json();
+                out.innerHTML = `Found ${files.length} cache files:\n\n`;
+                files.forEach(f => {
+                    out.innerHTML += `${f}\n`;
+                });
+            } catch (err) {
+                out.innerHTML += `Error: ${err.message}\n`;
+            }
+        }
+    </script>
+</body>
+</html>

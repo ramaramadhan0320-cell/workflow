@@ -1,0 +1,32 @@
+# CodeIgniter 4 .gitignore
+# ----------------------------------------------------------------------------
+
+# Environment Files
+.env
+*.env
+
+# Dependencies
+vendor/
+
+# User Data & Logs
+writable/*
+!writable/index.html
+!writable/.htaccess
+
+# Testing
+tests/_support/_generated/
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Production build artifacts
+public/uploads/*
+!public/uploads/index.html
+!public/uploads/.htaccess
+
+# Cache
+/public/assets/css/*.css.map
+/public/assets/js/*.js.map

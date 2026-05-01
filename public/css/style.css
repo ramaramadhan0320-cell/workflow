@@ -1,0 +1,77 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+
+    background-image: 
+        linear-gradient(
+            rgba(255,255,255,0.7),
+            rgba(255,255,255,0.7)
+        ),
+        url('/images/bg.jpg');
+
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* HEADER */
+.header {
+    background: #4CAF50;
+    color: white;
+    padding: 15px;
+    font-size: 20px;
+}
+
+/* MENU BUTTON */
+.menu {
+    display: flex;
+    gap: 15px;
+    padding: 20px;
+}
+
+.menu a {
+    text-decoration: none;
+    padding: 15px 25px;
+    border-radius: 10px;
+    color: white;
+    font-weight: bold;
+}
+
+.absensi { background: #2196F3; }
+.payment { background: #00BCD4; }
+.report  { background: #4CAF50; }
+
+/* CARD */
+.card {
+    background: white;
+    margin: 20px;
+    padding: 20px;
+    border-radius: 10px;
+}
+
+/* TABLE */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    background: #4CAF50;
+    color: white;
+    padding: 10px;
+}
+
+td {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+/* BUTTON */
+button {
+    padding: 8px 15px;
+    border: none;
+    background: #4CAF50;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}

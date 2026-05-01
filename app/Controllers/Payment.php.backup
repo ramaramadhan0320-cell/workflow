@@ -1,0 +1,1450 @@
+<?php
+
+namespace App\Controllers;
+
+use App\Models\UserModel;
+use App\Models\KehadiranModel;
+use App\Models\CashbonModel;
+use App\Models\BonusModel;
+use App\Models\SlipGajiModel;
+
+class Payment extends BaseController
+{
+    /**
+     * Helper method untuk download file dari Nextcloud
+     */
+    private function downloadFromNextcloud($filename)
+    {
+        try {
+            $nextcloudUrl = "https://cloud.daftartugasku.my.id/remote.php/dav/files/masterraden/workflow/Report/" . urlencode($filename);
+            $nextcloudUser = "masterraden";
+            $nextcloudPassword = "masterraden";
+
+            log_message('info', "Nextcloud Download Start - Filename: $filename");
+            
+            $ch = curl_init();
+            
+            // Set all curl options for proper PDF download
+            curl_setopt($ch, CURLOPT_URL, $nextcloudUrl);
+            curl_setopt($ch, CURLOPT_USERPWD, $nextcloudUser . ':' . $nextcloudPassword);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+            //
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+            curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+            curl_setopt($ch, CURLOPT_HEADER, false);
+            curl_setopt($ch, CURLOPT_ENCODING, ''); // Let curl handle encoding automatically
+            
+            // Add headers for PDF - NO COMPRESSION
+            $headers = [
+                'Accept: application/pdf, application/octet-stream',
+                'Accept-Encoding: identity',
+                'User-Agent: CI4-SlipGaji-Viewer/1.0'
+            ];
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+            $fileContent = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            $errno = curl_errno($ch);
+            $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            $contentLength = curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
+
+            curl_close($ch);
+            
+            // Log details
+            log_message('info', "Nextcloud Response - HTTP: $httpCode, Size: " . strlen($fileContent) . " bytes, ContentType: $contentType, ContentLength: $contentLength, CurlErrno: $errno");
+
+            if ($errno !== 0) {
+                log_message('error', "Curl Error ($errno): $curlError for file $filename");
+            }
+
+            if ($httpCode !== 200) {
+                log_message('error', "HTTP $httpCode from Nextcloud - URL: $nextcloudUrl");
+                if ($fileContent) {
+                    log_message('error', "Response (first 1000 chars): " . substr($fileContent, 0, 1000));
+                }
+                return [
+                    'success' => false,
+                    'error' => "HTTP Error $httpCode",
+                    'http_code' => $httpCode
+                ];
+            }
+
+            if (empty($fileContent)) {
+                log_message('error', "Empty response from Nextcloud for $filename");
+                return [
+                    'success' => false,
+                    'error' => 'Response kosong'
+                ];
+            }
+
+            // Validate PDF header
+            $pdfHeader = substr($fileContent, 0, 4);
+            if ($pdfHeader !== '%PDF') {
+                log_message('error', "Invalid PDF header for $filename. Got: " . bin2hex($pdfHeader) . ". Response preview: " . substr($fileContent, 0, 500));
+                return [
+                    'success' => false,
+                    'error' => 'File bukan PDF yang valid. Header: ' . bin2hex($pdfHeader),
+                    'header' => $pdfHeader
+                ];
+            }
+
+            log_message('info', "Nextcloud Download Success - $filename ({$fileContent} bytes)");
+            
+            return [
+                'success' => true,
+                'content' => $fileContent,
+                'size' => strlen($fileContent),
+                'content_type' => $contentType
+            ];
+
+        } catch (\Exception $e) {
+            log_message('error', 'Nextcloud download error: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function index()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return redirect()->to('/');
+            }
+
+            $userId = session()->get('id');
+            
+            // Persiapkan data default
+            $data = [
+                'user' => [
+                    'username' => session()->get('username') ?: 'User',
+                    'id' => $userId,
+                    'gaji_total' => 0,
+                    'nomor_rekening' => '0',
+                    'bank_tujuan' => 'N/A'
+                ],
+                'payments' => [],
+                'kehadiran' => [],
+                'total_cashbon' => 0,
+                'total_bonus' => 0,
+                'total_potongan' => 0,
+                'withdrawal_date' => date('d/m/Y'),
+                'can_withdraw' => false,
+                'slip_gaji_sent' => false
+            ];
+
+            // Coba ambil user data dari database
+            try {
+                $userModel = new UserModel();
+                $user = $userModel->find($userId);
+                if ($user) {
+                    $data['user'] = $user;
+                }
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading user: ' . $e->getMessage());
+                // Gunakan data default jika error
+            }
+
+            // Ambil data kehadiran user
+            try {
+                $kehadiranModel = new KehadiranModel();
+                $kehadiran = $kehadiranModel->where('user_id', $userId)
+                                           ->orderBy('tanggal', 'DESC')
+                                           ->findAll();
+                $data['kehadiran'] = $kehadiran ?: [];
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading kehadiran: ' . $e->getMessage());
+                // Gunakan data default jika error
+            }
+
+            // Ambil total cashbon user
+            try {
+                $cashbonModel = new CashbonModel();
+                $total_cashbon = $cashbonModel->getTotalCashbon($userId);
+                $data['total_cashbon'] = $total_cashbon ?? 0;
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading cashbon: ' . $e->getMessage());
+                // Gunakan data default jika error
+            }
+
+            // Ambil total bonus user
+            try {
+                $bonusModel = new BonusModel();
+                $total_bonus = $bonusModel->getTotalBonus($userId);
+                $data['total_bonus'] = $total_bonus ?? 0;
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading bonus: ' . $e->getMessage());
+                // Gunakan data default jika error
+            }
+
+            // Hitung potongan berdasarkan kehadiran
+            $total_potongan = 0;
+            if (!empty($data['kehadiran'])) {
+                $gaji_total = $data['user']['gaji_total'] ?? 0;
+                $gaji_per_hari = $gaji_total / 30; // Hitung gaji per hari (30 hari kerja)
+                
+                foreach ($data['kehadiran'] as $k) {
+                    $status_lower = strtolower($k['status']);
+                    
+                    if ($status_lower === 'hadir') {
+                        // Hadir = tidak ada potongan
+                        $total_potongan += 0;
+                    } elseif ($status_lower === 'sakit') {
+                        // Sakit = setengah dari 1 hari kerja
+                        $total_potongan += ($gaji_per_hari / 2);
+                    } elseif ($status_lower === 'izin' || $status_lower === 'alfa') {
+                        // Izin/Alfa = 1 hari kerja penuh
+                        $total_potongan += $gaji_per_hari;
+                    }
+                }
+            }
+            
+            $data['total_potongan'] = round($total_potongan);
+
+            // Cek apakah user sudah mengirim slip gaji
+            try {
+                $slipGajiModel = new SlipGajiModel();
+                $data['slip_gaji_sent'] = $slipGajiModel->hasSentSlip($userId);
+            } catch (\Exception $e) {
+                log_message('error', 'Error checking slip gaji: ' . $e->getMessage());
+                $data['slip_gaji_sent'] = false;
+            }
+
+            // Cek apakah slip gaji sudah di ACC folder
+            $data['slip_in_acc'] = false;
+            if ($data['slip_gaji_sent']) {
+                try {
+                    $accStatusResponse = $this->checkAccStatus();
+                    $accStatusData = json_decode($accStatusResponse->getBody(), true);
+                    $data['slip_in_acc'] = $accStatusData['success'] && $accStatusData['is_in_acc'];
+                } catch (\Exception $e) {
+                    log_message('error', 'Error checking ACC status: ' . $e->getMessage());
+                    $data['slip_in_acc'] = false;
+                }
+            }
+
+            // Hitung tanggal pencairan (akhir bulan, skip weekend)
+            $data['withdrawal_date'] = $this->calculateWithdrawalDate();
+
+            // Cek apakah hari ini adalah tanggal pencairan dan user sudah absen
+            $data['can_withdraw'] = $this->canUserWithdraw($userId, $data['withdrawal_date']);
+
+            return view('payment', $data);
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::index - ' . $e->getMessage());
+            return redirect()->to('/dashboard')->with('error', 'Error loading payment page: ' . $e->getMessage());
+        }
+    }
+
+    public function store()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return redirect()->to('/');
+            }
+
+            // TODO: Implement store logic setelah database setup
+            
+            if ($this->request->isAJAX()) {
+                return $this->response
+                    ->setStatusCode(200)
+                    ->setHeader('Content-Type', 'application/json; charset=utf-8')
+                    ->setBody(json_encode([
+                        'status' => 'success',
+                        'message' => 'Payment berhasil ditambahkan'
+                    ]));
+            }
+            return redirect()->to('/payment')->with('success', 'Payment berhasil ditambahkan');
+        } catch (\Exception $e) {
+            if ($this->request->isAJAX()) {
+                return $this->response
+                    ->setStatusCode(500)
+                    ->setHeader('Content-Type', 'application/json; charset=utf-8')
+                    ->setBody(json_encode([
+                        'status' => 'error',
+                        'message' => $e->getMessage()
+                    ]));
+            }
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function update()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return redirect()->to('/');
+            }
+
+            // TODO: Implement update logic setelah database setup
+
+            if ($this->request->isAJAX()) {
+                return $this->response
+                    ->setStatusCode(200)
+                    ->setHeader('Content-Type', 'application/json; charset=utf-8')
+                    ->setBody(json_encode([
+                        'status' => 'success',
+                        'message' => 'Payment berhasil diperbarui'
+                    ]));
+            }
+            return redirect()->to('/payment')->with('success', 'Payment berhasil diperbarui');
+        } catch (\Exception $e) {
+            if ($this->request->isAJAX()) {
+                return $this->response
+                    ->setStatusCode(500)
+                    ->setHeader('Content-Type', 'application/json; charset=utf-8')
+                    ->setBody(json_encode([
+                        'status' => 'error',
+                        'message' => $e->getMessage()
+                    ]));
+            }
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function delete($id = null)
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return redirect()->to('/');
+            }
+
+            // TODO: Implement delete logic setelah database setup
+
+            return $this->response
+                ->setStatusCode(200)
+                ->setHeader('Content-Type', 'application/json; charset=utf-8')
+                ->setBody(json_encode([
+                    'status' => 'success',
+                    'message' => 'Payment berhasil dihapus'
+                ]));
+        } catch (\Exception $e) {
+            return $this->response
+                ->setStatusCode(500)
+                ->setHeader('Content-Type', 'application/json; charset=utf-8')
+                ->setBody(json_encode([
+                    'status' => 'error',
+                    'message' => $e->getMessage()
+                ]));
+        }
+    }
+
+    public function rincian()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return redirect()->to('/');
+            }
+
+            $userId = session()->get('id');
+            
+            $data = [
+                'user' => [
+                    'username' => session()->get('username') ?: 'User',
+                    'id' => $userId
+                ],
+                'cashbon' => [],
+                'bonus' => [],
+                'total_cashbon' => 0,
+                'total_bonus' => 0
+            ];
+
+            // Ambil user data
+            try {
+                $userModel = new UserModel();
+                $user = $userModel->find($userId);
+                if ($user) {
+                    $data['user'] = $user;
+                }
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading user: ' . $e->getMessage());
+            }
+
+            // Ambil detail cashbon user
+            try {
+                $cashbonModel = new CashbonModel();
+                $cashbon = $cashbonModel->getCashbonByUser($userId);
+                $data['cashbon'] = $cashbon ?: [];
+                $data['total_cashbon'] = $cashbonModel->getTotalCashbon($userId) ?? 0;
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading cashbon: ' . $e->getMessage());
+            }
+
+            // Ambil detail bonus user
+            try {
+                $bonusModel = new BonusModel();
+                $bonus = $bonusModel->getBonusByUser($userId);
+                $data['bonus'] = $bonus ?: [];
+                $data['total_bonus'] = $bonusModel->getTotalBonus($userId) ?? 0;
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading bonus: ' . $e->getMessage());
+            }
+
+            return view('payment-rincian', $data);
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::rincian - ' . $e->getMessage());
+            return redirect()->to('/payment')->with('error', 'Error loading rincian page: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Check jika user eligible untuk withdrawal
+     * Kondisi:
+     * 1. Sudah hari terakhir bulan (28/29/30/31)
+     * 2. Hari tersebut bukan Sabtu/Minggu
+     * 3. User sudah absen pada hari tersebut
+     */
+    private function checkWithdrawalEligibility($userId)
+    {
+        $today = date('Y-m-d');
+        $dayOfMonth = (int)date('d');
+        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, (int)date('m'), (int)date('Y'));
+        $dayOfWeek = (int)date('w'); // 0 = Sunday, 6 = Saturday
+        
+        // Cek apakah hari ini adalah hari terakhir bulan
+        if ($dayOfMonth !== $daysInMonth) {
+            return [
+                'eligible' => false,
+                'reason' => 'Bukan hari terakhir bulan. Hari terakhir bulan: ' . $daysInMonth
+            ];
+        }
+        
+        // Cek apakah hari terakhir bulan bukan Sabtu/Minggu
+        if ($dayOfWeek == 0 || $dayOfWeek == 6) {
+            return [
+                'eligible' => false,
+                'reason' => 'Hari terakhir bulan jatuh pada hari libur (Sabtu/Minggu)'
+            ];
+        }
+        
+        // Cek apakah user sudah absen hari ini
+        try {
+            $kehadiranModel = new KehadiranModel();
+            $absenHariIni = $kehadiranModel->where('user_id', $userId)
+                                          ->where('tanggal', $today)
+                                          ->first();
+            
+            if (!$absenHariIni) {
+                return [
+                    'eligible' => false,
+                    'reason' => 'Anda belum absen untuk hari terakhir bulan'
+                ];
+            }
+        } catch (\Exception $e) {
+            return [
+                'eligible' => false,
+                'reason' => 'Error checking attendance: ' . $e->getMessage()
+            ];
+        }
+        
+        return ['eligible' => true];
+    }
+
+    /**
+     * Menampilkan slip gaji untuk dikirim
+     */
+    public function slip()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return redirect()->to('/');
+            }
+
+            $userId = session()->get('id');
+            
+            // TODO: Aktifkan eligibility check ketika sudah final
+            // Cek eligibility
+            // $eligibility = $this->checkWithdrawalEligibility($userId);
+            // if (!$eligibility['eligible']) {
+            //     return redirect()->to('/payment')->with('error', $eligibility['reason']);
+            // }
+
+            // Persiapkan data slip
+            $data = [
+                'user' => [
+                    'username' => session()->get('username') ?: 'User',
+                    'id' => $userId
+                ],
+                'kehadiran' => [],
+                'total_cashbon' => 0,
+                'total_bonus' => 0,
+                'total_potongan' => 0,
+                'created_at' => date('d/m/Y H:i:s'),
+                'withdrawal_date' => $this->calculateWithdrawalDate()
+            ];
+
+            // Ambil user data
+            try {
+                $userModel = new UserModel();
+                $user = $userModel->find($userId);
+                if ($user) {
+                    $data['user'] = $user;
+                }
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading user: ' . $e->getMessage());
+            }
+
+            // Ambil data kehadiran user
+            try {
+                $kehadiranModel = new KehadiranModel();
+                $kehadiran = $kehadiranModel->where('user_id', $userId)
+                                           ->orderBy('tanggal', 'DESC')
+                                           ->findAll();
+                $data['kehadiran'] = $kehadiran ?: [];
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading kehadiran: ' . $e->getMessage());
+            }
+
+            // Ambil total cashbon user
+            try {
+                $cashbonModel = new CashbonModel();
+                $total_cashbon = $cashbonModel->getTotalCashbon($userId);
+                $data['total_cashbon'] = $total_cashbon ?? 0;
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading cashbon: ' . $e->getMessage());
+            }
+
+            // Ambil total bonus user
+            try {
+                $bonusModel = new BonusModel();
+                $total_bonus = $bonusModel->getTotalBonus($userId);
+                $data['total_bonus'] = $total_bonus ?? 0;
+            } catch (\Exception $e) {
+                log_message('error', 'Error loading bonus: ' . $e->getMessage());
+            }
+
+            // Hitung potongan berdasarkan kehadiran
+            $total_potongan = 0;
+            if (!empty($data['kehadiran'])) {
+                $gaji_total = $data['user']['gaji_total'] ?? 0;
+                $gaji_per_hari = $gaji_total / 30;
+                
+                foreach ($data['kehadiran'] as $k) {
+                    $status_lower = strtolower($k['status']);
+                    
+                    if ($status_lower === 'hadir') {
+                        $total_potongan += 0;
+                    } elseif ($status_lower === 'sakit') {
+                        $total_potongan += ($gaji_per_hari / 2);
+                    } elseif ($status_lower === 'izin' || $status_lower === 'alfa') {
+                        $total_potongan += $gaji_per_hari;
+                    }
+                }
+            }
+            
+            $data['total_potongan'] = round($total_potongan);
+
+            // Cek apakah slip sudah dikirim sebelumnya
+            try {
+                $slipGajiModel = new SlipGajiModel();
+                $sentSlip = $slipGajiModel->getSentSlip($userId);
+                $data['slip_sent'] = $sentSlip !== null;
+                $data['slip_filename'] = $sentSlip['filename'] ?? null;
+                $data['slip_sent_at'] = $sentSlip['sent_at'] ?? null;
+            } catch (\Exception $e) {
+                log_message('error', 'Error checking slip status: ' . $e->getMessage());
+                $data['slip_sent'] = false;
+            }
+
+            return view('payment-slip', $data);
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::slip - ' . $e->getMessage());
+            return redirect()->to('/payment')->with('error', 'Error loading slip page: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Kirim slip gaji ke Nextcloud sebagai PDF
+     */
+    public function sendSlip()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return $this->response->setJSON([
+                    'status' => 401,
+                    'message' => 'Unauthorized'
+                ]);
+            }
+
+            $userId = session()->get('id');
+            
+            // TODO: Aktifkan eligibility check ketika sudah final
+            // Cek eligibility
+            // $eligibility = $this->checkWithdrawalEligibility($userId);
+            // if (!$eligibility['eligible']) {
+            //     return $this->response->setJSON([
+            //         'status' => 400,
+            //         'message' => $eligibility['reason']
+            //     ]);
+            // }
+
+            // Load user data untuk nama file
+            $userModel = new UserModel();
+            $user = $userModel->find($userId);
+            
+            if (!$user) {
+                return $this->response->setJSON([
+                    'status' => 400,
+                    'message' => 'User tidak ditemukan'
+                ]);
+            }
+
+            // Ambil PDF dari request
+            $pdfDataUri = $this->request->getPost('pdfData');
+            
+            if (!$pdfDataUri) {
+                return $this->response->setJSON([
+                    'status' => 400,
+                    'message' => 'PDF data tidak ditemukan'
+                ]);
+            }
+
+            // Decode data URI ke binary dengan proper handling
+            try {
+                // Extract base64 string dari data URI
+                $base64String = $pdfDataUri;
+                if (strpos($base64String, 'data:application/pdf;base64,') === 0) {
+                    $base64String = substr($base64String, strlen('data:application/pdf;base64,'));
+                } elseif (strpos($base64String, 'data:application/octet-stream;base64,') === 0) {
+                    // Alternative MIME type
+                    $base64String = substr($base64String, strlen('data:application/octet-stream;base64,'));
+                } else {
+                    // Coba cari 'base64,' di string
+                    $parts = explode('base64,', $base64String);
+                    if (count($parts) > 1) {
+                        $base64String = $parts[1];
+                    }
+                }
+                
+                // Clean base64 string - remove whitespace dan special chars
+                $base64String = preg_replace('/\s+/', '', $base64String);
+                $base64String = preg_replace('/[^A-Za-z0-9+\/=]/', '', $base64String);
+                
+                // Add padding if needed
+                $missing_padding = strlen($base64String) % 4;
+                if ($missing_padding) {
+                    $base64String .= str_repeat('=', 4 - $missing_padding);
+                }
+                
+                $base64Length = strlen($base64String);
+                log_message('info', "Processing base64 - Original request size: " . strlen($pdfDataUri) . " chars, After cleanup: $base64Length chars");
+                
+                // Try decode without strict mode first
+                $pdfBinary = base64_decode($base64String, false);
+                
+                if ($pdfBinary === false || empty($pdfBinary)) {
+                    log_message('error', "Base64 decode failed - trying strict mode");
+                    // Try dengan strict mode
+                    $pdfBinary = base64_decode($base64String, true);
+                    if ($pdfBinary === false) {
+                        throw new \Exception("Base64 decode gagal");
+                    }
+                }
+                
+                $binarySize = strlen($pdfBinary);
+                log_message('info', "PDF binary size: " . $binarySize . " bytes");
+                
+                if ($binarySize === 0) {
+                    throw new \Exception("PDF binary kosong setelah decode");
+                }
+                
+                // Log first 20 bytes as hex untuk debugging
+                $headerHex = bin2hex(substr($pdfBinary, 0, 20));
+                log_message('info', "PDF header (hex): " . $headerHex);
+                
+                // Validate PDF header - more lenient approach
+                $header = substr($pdfBinary, 0, 4);
+                if ($header !== '%PDF') {
+                    log_message('warning', "PDF header tidak standar. Expected '%PDF', got: '" . $header . "'");
+                    
+                    // Check if it's at least starting with % which suggests PDF format
+                    if ($binarySize < 4) {
+                        throw new \Exception("PDF file terlalu kecil (hanya $binarySize bytes)");
+                    }
+                    
+                    // If minimal structure looks PDF-ish, continue
+                    if (substr($header, 0, 1) !== '%') {
+                        throw new \Exception("File signature tidak cocok (expected '%', got '" . substr($header, 0, 1) . "')");
+                    }
+                }
+                
+                log_message('info', "PDF validation passed!");
+                
+            } catch (\Exception $e) {
+                log_message('error', "Exception in PDF decode: " . $e->getMessage());
+                return $this->response->setJSON([
+                    'status' => 400,
+                    'message' => 'Error decode PDF: ' . $e->getMessage() . ' (Size: ' . strlen($pdfBinary ?? '') . ' bytes)'
+                ]);
+            }
+
+            // Generate nama file
+            $username = (string)($user['username'] ?? 'USER');
+            $fileName = 'SLIP_GAJI_' . strtoupper($username) . '_' . date('Ymd_His') . '.pdf';
+            
+            // Upload ke Nextcloud WebDAV
+            $nextcloudUrl = "https://cloud.daftartugasku.my.id/remote.php/dav/files/masterraden/workflow/Report/" . urlencode($fileName);
+            $nextcloudUser = "masterraden";
+            $nextcloudPassword = "masterraden";
+
+            // Gunakan cURL untuk upload
+            $ch = curl_init();
+            
+            curl_setopt($ch, CURLOPT_URL, $nextcloudUrl);
+            curl_setopt($ch, CURLOPT_USERPWD, $nextcloudUser . ':' . $nextcloudPassword);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+            curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, false);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $pdfBinary);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+            curl_setopt($ch, CURLOPT_VERBOSE, false);
+
+            // Set Content-Length header
+            $headers = [
+                'Content-Type: application/pdf',
+                'Content-Length: ' . strlen($pdfBinary)
+            ];
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            $curlErrno = curl_errno($ch);
+
+            curl_close($ch);
+
+            // Log untuk debugging
+            log_message('info', "Upload to Nextcloud - HTTP Code: $httpCode, File: $fileName, Size: " . strlen($pdfBinary) . " bytes");
+            if ($curlError) {
+                log_message('error', "Curl Error [$curlErrno]: $curlError");
+            }
+
+            // Check status upload
+            if ($httpCode == 201 || $httpCode == 204) {
+                // Save record ke database
+                try {
+                    $slipGajiModel = new SlipGajiModel();
+                    $slipGajiModel->markAsSent($userId, $fileName);
+                    log_message('info', "Slip record saved for user $userId");
+                } catch (\Exception $e) {
+                    log_message('error', 'Error saving slip record: ' . $e->getMessage());
+                    // Tetap return success meski save record gagal
+                }
+
+                return $this->response->setJSON([
+                    'status' => 200,
+                    'message' => 'Slip gaji berhasil dikirim ke cloud',
+                    'fileName' => $fileName,
+                    'httpCode' => $httpCode
+                ]);
+            } else {
+                $errorMsg = "Upload ke Nextcloud gagal (HTTP: $httpCode)";
+                
+                if ($httpCode == 401) {
+                    $errorMsg = "Authentication gagal - periksa username/password Nextcloud";
+                } elseif ($httpCode == 404) {
+                    $errorMsg = "Folder /workflow/Report tidak ditemukan di Nextcloud";
+                } elseif ($httpCode == 409) {
+                    $errorMsg = "Folder /workflow/Report tidak ada di Nextcloud. Buat folder terlebih dahulu.";
+                } elseif ($httpCode == 507) {
+                    $errorMsg = "Storage Nextcloud penuh";
+                }
+                
+                if ($curlError) {
+                    $errorMsg .= " (Error: $curlError)";
+                }
+
+                log_message('error', "Upload failed: $errorMsg");
+                
+                return $this->response->setJSON([
+                    'status' => 500,
+                    'message' => $errorMsg,
+                    'http_code' => $httpCode,
+                    'debug' => $curlError
+                ]);
+            }
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::sendSlip - ' . $e->getMessage());
+            return $this->response->setJSON([
+                'status' => 500,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Calculate withdrawal date - last day of current month
+     * If last day is Saturday/Sunday, find last working day before that
+     */
+    private function calculateWithdrawalDate()
+    {
+        $year = (int)date('Y');
+        $month = (int)date('m');
+        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        
+        // Start from last day of month
+        $date = new \DateTime("$year-$month-$daysInMonth");
+        $dayOfWeek = (int)$date->format('w'); // 0 = Sunday, 6 = Saturday
+        
+        // Keep going back if it's weekend (0 = Sunday, 6 = Saturday)
+        while ($dayOfWeek == 0 || $dayOfWeek == 6) {
+            $date->modify('-1 day');
+            $dayOfWeek = (int)$date->format('w');
+        }
+        
+        return $date->format('d/m/Y');
+    }
+
+    /**
+     * Check if user can withdraw
+     * Conditions:
+     * 1. Today must be the withdrawal date (last working day of month)
+     * 2. User must have submitted attendance for that day
+     */
+    private function canUserWithdraw($userId, $withdrawalDate)
+    {
+        try {
+            // Convert withdrawal_date format (d/m/Y) to Y-m-d for comparison
+            $withdrawalDateTime = \DateTime::createFromFormat('d/m/Y', $withdrawalDate);
+            $withdrawalDateFormatted = $withdrawalDateTime->format('Y-m-d');
+            $today = date('Y-m-d');
+
+            // Check if today is withdrawal date
+            if ($today !== $withdrawalDateFormatted) {
+                return false;
+            }
+
+            // Check if user has attendance record for today
+            $kehadiranModel = new KehadiranModel();
+            $attendanceRecord = $kehadiranModel->where('user_id', $userId)
+                                               ->where('tanggal', $today)
+                                               ->first();
+
+            return $attendanceRecord !== null;
+        } catch (\Exception $e) {
+            log_message('error', 'Error checking withdrawal eligibility: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get slip gaji data dari database untuk preview modal
+     */
+    public function getSlipData()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return $this->response->setJSON([
+                    'status' => 401,
+                    'message' => 'Unauthorized'
+                ]);
+            }
+
+            $userId = session()->get('id');
+            
+            // Get slip dari database
+            $slipGajiModel = new SlipGajiModel();
+            $sentSlip = $slipGajiModel->getSentSlip($userId);
+            
+            if (!$sentSlip) {
+                return $this->response->setJSON([
+                    'status' => 404,
+                    'message' => 'Tidak ada slip gaji yang dikirim'
+                ]);
+            }
+            
+            return $this->response->setJSON([
+                'status' => 200,
+                'data' => [
+                    'filename' => $sentSlip['filename'],
+                    'sent_at' => $sentSlip['sent_at'],
+                    'status' => $sentSlip['status']
+                ]
+            ]);
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::getSlipData - ' . $e->getMessage());
+            return $this->response->setJSON([
+                'status' => 500,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Get PDF as base64 untuk modal preview
+     * Parameter: filename=slip_filename.pdf
+     */
+    public function getSlipPdfBase64()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return $this->response->setJSON([
+                    'status' => 401,
+                    'message' => 'Unauthorized'
+                ]);
+            }
+
+            $userId = session()->get('id');
+            $filename = $this->request->getVar('filename');
+            
+            if (!$filename) {
+                return $this->response->setJSON([
+                    'status' => 400,
+                    'message' => 'Filename tidak ditemukan'
+                ]);
+            }
+            
+            // Validate - user hanya bisa access file mereka
+            $slipGajiModel = new SlipGajiModel();
+            $sentSlip = $slipGajiModel->getSentSlip($userId);
+            
+            if (!$sentSlip || $sentSlip['filename'] !== $filename) {
+                return $this->response->setJSON([
+                    'status' => 403,
+                    'message' => 'Anda tidak memiliki akses ke file ini'
+                ]);
+            }
+            
+            // Download dari Nextcloud
+            $downloadResult = $this->downloadFromNextcloud($filename);
+            
+            if (!$downloadResult['success']) {
+                return $this->response->setJSON([
+                    'status' => 500,
+                    'message' => 'Gagal load file dari cloud'
+                ]);
+            }
+
+            // Convert to base64
+            $pdfBase64 = base64_encode($downloadResult['content']);
+            
+            return $this->response->setJSON([
+                'status' => 200,
+                'data' => [
+                    'base64' => $pdfBase64,
+                    'filename' => $filename
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::getSlipPdfBase64 - ' . $e->getMessage());
+            return $this->response->setJSON([
+                'status' => 500,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Download slip gaji dari Nextcloud
+     */
+    public function downloadSlip()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return $this->response->setJSON([
+                    'status' => 401,
+                    'message' => 'Unauthorized'
+                ]);
+            }
+
+            $userId = session()->get('id');
+            $filename = $this->request->getVar('filename');
+            
+            if (!$filename) {
+                return $this->response->setJSON([
+                    'status' => 400,
+                    'message' => 'Filename tidak ditemukan'
+                ]);
+            }
+            
+            // Validate filename - pastikan user hanya bisa download file mereka
+            $slipGajiModel = new SlipGajiModel();
+            $sentSlip = $slipGajiModel->getSentSlip($userId);
+            
+            if (!$sentSlip || $sentSlip['filename'] !== $filename) {
+                return $this->response->setJSON([
+                    'status' => 403,
+                    'message' => 'Anda tidak memiliki akses ke file ini'
+                ]);
+            }
+            
+            // Download dari Nextcloud menggunakan helper method
+            $downloadResult = $this->downloadFromNextcloud($filename);
+            
+            if (!$downloadResult['success']) {
+                return $this->response->setJSON([
+                    'status' => 500,
+                    'message' => 'Gagal download file dari cloud: ' . $downloadResult['error']
+                ]);
+            }
+
+            $fileContent = $downloadResult['content'];
+
+            // Return file as download
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+                ->setHeader('Content-Length', strlen($fileContent))
+                ->setBody($fileContent);
+                
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::downloadSlip - ' . $e->getMessage());
+            return $this->response->setJSON([
+                'status' => 500,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Cache PDF untuk preview - store temp file dan return URL
+     */
+    private function cachePdfAndGetUrl($filename, $fileContent)
+    {
+        try {
+            $tempDir = WRITEPATH . 'uploads/temp_pdf_cache/';
+            
+            // Create directory jika belum ada
+            if (!is_dir($tempDir)) {
+                @mkdir($tempDir, 0777, true);
+            }
+            
+            // Generate unique cache filename
+            $cacheFilename = md5($filename . time()) . '.pdf';
+            $cachePath = $tempDir . $cacheFilename;
+            
+            // Write to cache dengan validasi
+            $bytesWritten = file_put_contents($cachePath, $fileContent, LOCK_EX);
+            $expectedSize = strlen($fileContent);
+            
+            if ($bytesWritten === false || $bytesWritten !== $expectedSize) {
+                log_message('error', "Cache write failed for $filename: got $bytesWritten bytes, expected $expectedSize");
+                return [
+                    'success' => false,
+                    'error' => 'Failed to write cache file'
+                ];
+            }
+            
+            // Verify file exists and has correct size
+            if (!file_exists($cachePath) || filesize($cachePath) !== $expectedSize) {
+                log_message('error', "Cache file verification failed for $filename");
+                return [
+                    'success' => false,
+                    'error' => 'Cache file verification failed'
+                ];
+            }
+            
+            log_message('info', "Cache file created: $cacheFilename ($expectedSize bytes)");
+            
+            // Create serving URL via CodeIgniter route with download() method
+            return [
+                'success' => true,
+                'cache_url' => base_url('payment/serve-cached-pdf') . '?file=' . urlencode($cacheFilename),
+                'cache_path' => $cachePath,
+                'cache_filename' => $cacheFilename
+            ];
+        } catch (\Exception $e) {
+            log_message('error', 'Cache PDF error: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get slip gaji PDF untuk preview (streaming, tidak download)
+     */
+    public function getSlipPdf()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return $this->response->setJSON([
+                    'status' => 401,
+                    'message' => 'Unauthorized'
+                ]);
+            }
+
+            $userId = session()->get('id');
+            $filename = $this->request->getVar('filename');
+            
+            if (!$filename) {
+                return $this->response->setJSON([
+                    'status' => 400,
+                    'message' => 'Filename tidak ditemukan'
+                ]);
+            }
+            
+            // Validate filename - pastikan user hanya bisa access file mereka
+            $slipGajiModel = new SlipGajiModel();
+            $sentSlip = $slipGajiModel->getSentSlip($userId);
+            
+            if (!$sentSlip || $sentSlip['filename'] !== $filename) {
+                return $this->response->setJSON([
+                    'status' => 403,
+                    'message' => 'Anda tidak memiliki akses ke file ini'
+                ]);
+            }
+            
+            // Download dari Nextcloud menggunakan helper method
+            $downloadResult = $this->downloadFromNextcloud($filename);
+            
+            if (!$downloadResult['success']) {
+                return $this->response->setJSON([
+                    'status' => 500,
+                    'message' => 'Gagal load file dari cloud: ' . $downloadResult['error']
+                ]);
+            }
+
+            $fileContent = $downloadResult['content'];
+            $fileSize = $downloadResult['size'];
+
+            // ALWAYS use cache URL untuk preview (lebih reliable daripada data URI)
+            log_message('info', "Caching PDF for preview - Size: " . $fileSize . " bytes");
+            
+            $cacheResult = $this->cachePdfAndGetUrl($filename, $fileContent);
+            if ($cacheResult['success']) {
+                log_message('info', "PDF cached successfully at: " . $cacheResult['cache_path']);
+                
+                return $this->response->setJSON([
+                    'status' => 200,
+                    'data' => [
+                        'pdf_url' => $cacheResult['cache_url'],
+                        'filename' => $filename,
+                        'use_url' => true
+                    ]
+                ]);
+            } else {
+                log_message('error', "Cache failed: " . $cacheResult['error']);
+                return $this->response->setJSON([
+                    'status' => 500,
+                    'message' => 'Gagal cache PDF: ' . ($cacheResult['error'] ?? 'Unknown error')
+                ]);
+            }
+                
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::getSlipPdf - ' . $e->getMessage());
+            return $this->response->setJSON([
+                'status' => 500,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Serve cached PDF file via PHP (untuk PDF.js preview atau download)
+     * Parameter: file=filename.pdf, download=true (optional)
+     */
+    public function serveCachedPdf()
+    {
+        try {
+            $filename = $this->request->getVar('file');
+            $download = $this->request->getVar('download') === 'true';
+            
+            if (!$filename) {
+                return 'File parameter required';
+            }
+
+            $cachePath = WRITEPATH . 'uploads/temp_pdf_cache/' . $filename;
+            
+            if (!file_exists($cachePath)) {
+                return 'File not found: ' . $cachePath;
+            }
+
+            // Read file
+            $content = file_get_contents($cachePath);
+            if ($content === false) {
+                return 'Failed to read file';
+            }
+
+            // Set headers sebelum output
+            header('Content-Type: application/pdf', true);
+            header('Content-Length: ' . strlen($content), true);
+            header('Cache-Control: public, max-age=3600', true);
+            
+            if ($download) {
+                header('Content-Disposition: attachment; filename="slip_gaji.pdf"', true);
+            } else {
+                header('Content-Disposition: inline; filename="slip_gaji.pdf"', true);
+            }
+
+            // Output file
+            echo $content;
+            exit;
+
+        } catch (\Exception $e) {
+            log_message('error', 'serveCachedPdf Exception: ' . $e->getMessage());
+            return 'Error: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Preview cached PDF dengan base64 embed langsung
+     * Parameter: file=filename.pdf
+     */
+    public function previewSlip()
+    {
+        try {
+            $filename = $this->request->getVar('file');
+            
+            if (!$filename) {
+                return "File parameter required";
+            }
+
+            $cachePath = WRITEPATH . 'uploads/temp_pdf_cache/' . $filename;
+            
+            if (!file_exists($cachePath)) {
+                return "File not found: " . $cachePath;
+            }
+
+            // Read file
+            $pdfContent = file_get_contents($cachePath);
+            if ($pdfContent === false) {
+                return "Failed to read file";
+            }
+
+            // Convert to base64
+            $pdfBase64 = base64_encode($pdfContent);
+            $dataUri = 'data:application/pdf;base64,' . $pdfBase64;
+            
+            // Generate download URL
+            $downloadUrl = base_url('payment/serve-cached-pdf') . '?file=' . urlencode($filename) . '&download=true';
+            
+            // Return HTML dengan PDF embed via base64
+            $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview Slip Gaji</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            flex-direction: column;
+            max-height: 95vh;
+        }
+        .header {
+            padding: 24px;
+            border-bottom: 2px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(to right, #f8f9fa, #ffffff);
+        }
+        .header h1 {
+            font-size: 22px;
+            color: #1a1a1a;
+            font-weight: 600;
+        }
+        .header .controls {
+            display: flex;
+            gap: 12px;
+        }
+        .header button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        .download-btn {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+        }
+        .close-btn {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        .close-btn:hover {
+            background: #d1d5db;
+            transform: translateY(-2px);
+        }
+        .pdf-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            padding: 30px;
+            overflow: auto;
+            min-height: 500px;
+        }
+        embed {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Preview Slip Gaji</h1>
+            <div class="controls">
+                <button class="download-btn" onclick="downloadPdf()">📥 Download</button>
+                <button class="close-btn" onclick="window.close()">Tutup</button>
+            </div>
+        </div>
+        <div class="pdf-container">
+            <embed src="$dataUri" type="application/pdf" />
+        </div>
+    </div>
+    <script>
+        function downloadPdf() {
+            window.location.href = "$downloadUrl";
+        }
+    </script>
+</body>
+</html>
+HTML;
+            
+            return $html;
+
+        } catch (\Exception $e) {
+            return 'Error: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Debug endpoint untuk test Nextcloud connection
+     */
+    public function debugNextcloud()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return $this->response->setJSON([
+                    'status' => 401,
+                    'message' => 'Unauthorized'
+                ]);
+            }
+
+            $filename = $this->request->getVar('filename') ?? 'test.pdf';
+            
+            // Test download
+            $result = $this->downloadFromNextcloud($filename);
+            
+            $response = [
+                'filename' => $filename,
+                'success' => $result['success'],
+                'error' => $result['error'] ?? null,
+                'size' => $result['size'] ?? null,
+                'content_type' => $result['content_type'] ?? null
+            ];
+            
+            if ($result['success']) {
+                // Jangan return content untuk debug JSON, cukup metadata
+                $response['message'] = 'PDF berhasil di-download dari Nextcloud';
+                $response['pdf_valid'] = true;
+            }
+            
+            return $this->response->setJSON($response);
+            
+        } catch (\Exception $e) {
+            return $this->response->setJSON([
+                'status' => 500,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Check if user's slip gaji is in ACC folder
+     */
+    public function checkAccStatus()
+    {
+        try {
+            if (!session()->get('isLoggedIn')) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Unauthorized']);
+            }
+
+            $userId = session()->get('id');
+
+            // Get slip data
+            $slipGajiModel = new SlipGajiModel();
+            $slip = $slipGajiModel->getSentSlip($userId);
+
+            if (!$slip) {
+                return $this->response->setJSON(['success' => false, 'message' => 'No slip found']);
+            }
+
+            $filename = $slip['filename'];
+
+            // Check if file exists in ACC folder
+            $nextcloudBase = "https://cloud.daftartugasku.my.id/remote.php/dav/files/masterraden";
+            $accPath = "/workflow/Report/acc/" . urlencode($filename);
+            $nextcloudUser = "masterraden";
+            $nextcloudPassword = "masterraden";
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $nextcloudBase . $accPath);
+            curl_setopt($ch, CURLOPT_USERPWD, $nextcloudUser . ':' . $nextcloudPassword);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'HEAD');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            $errno = curl_errno($ch);
+
+            curl_close($ch);
+
+            if ($errno !== 0) {
+                log_message('error', "Curl Error checking ACC status ($errno): $curlError");
+                return $this->response->setJSON(['success' => false, 'message' => 'Error checking file status']);
+            }
+
+            $isInAcc = ($httpCode === 200);
+
+            return $this->response->setJSON([
+                'success' => true,
+                'is_in_acc' => $isInAcc,
+                'filename' => $filename
+            ]);
+
+        } catch (\Exception $e) {
+            log_message('error', 'Payment::checkAccStatus - ' . $e->getMessage());
+            return $this->response->setJSON(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        }
+    }
