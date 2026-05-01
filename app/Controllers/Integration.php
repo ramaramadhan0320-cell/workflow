@@ -446,6 +446,8 @@ class Integration extends BaseController
             log_message('error', 'Refresh device status error: ' . $e->getMessage());
             return $this->response->setJSON(['success' => false, 'message' => 'Server error']);
         }
+    }
+
     /**
      * Proxy untuk mengambil tampilan web IoT agar tidak diblokir browser (Mixed Content/PNA)
      * URL: /integration/proxy?url=http://192.168.1.1
