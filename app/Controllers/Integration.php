@@ -464,13 +464,14 @@ class Integration extends BaseController
         $devicePort = $this->request->getVar('port');
         $path = $this->request->getVar('path');
         
-        // Logika Pintar: Jika path kosong, berikan default berdasarkan port
-        if (empty($path) || $path === '/stream') {
-            if ($devicePort == '1984') {
-                $path = '/api/stream.mjpeg?src=kamera_absensi';
-            } else {
-                $path = '/?action=stream';
-            }
+        // FORCED LOGIC: Jika ini go2rtc (1984/1884), kita HARUS pakai MJPEG API
+        // Karena mode scanner menggunakan tag <img> yang tidak bisa memuat halaman .html
+        if ($devicePort == '1984' || $devicePort == '1884') {
+            $path = '/api/stream.mjpeg?src=kamera_absensi';
+        } 
+        // Fallback untuk kamera lain
+        elseif (empty($path) || $path === '/stream' || strpos($path, '.html') !== false) {
+            $path = '/?action=stream';
         }
 
         if ($path[0] !== '/') $path = '/' . $path;
