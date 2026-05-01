@@ -470,12 +470,19 @@ class Integration extends BaseController
             curl_setopt($ch, CURLOPT_URL, $targetUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // Beri waktu 5 detik untuk jabat tangan
-            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-            curl_setopt($ch, CURLOPT_USERAGENT, 'Workflow-Proxy/1.0');
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10); 
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
             
+            // Tambahkan header standar browser
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language: en-US,en;q=0.9',
+                'Connection: keep-alive'
+            ]);
+
             // Penting untuk Docker & Jaringan Lokal
-            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4); // Paksa IPv4
+            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4); 
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
