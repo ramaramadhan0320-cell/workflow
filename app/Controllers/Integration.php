@@ -470,19 +470,12 @@ class Integration extends BaseController
             curl_setopt($ch, CURLOPT_URL, $targetUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10); 
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // Beri waktu 5 detik untuk jabat tangan
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Workflow-Proxy/1.0');
             
-            // Tambahkan header standar browser
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language: en-US,en;q=0.9',
-                'Connection: keep-alive'
-            ]);
-
             // Penting untuk Docker & Jaringan Lokal
-            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4); 
+            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4); // Paksa IPv4
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
@@ -499,10 +492,15 @@ class Integration extends BaseController
 
             curl_close($ch);
 
-            // Jika konten adalah HTML, kita perlu menyuntikkan <base> tag agar link internal tidak rusak
+            // Jika konten adalah HTML, kita perlu menyuntikkan <base> tag dan me-rewrite URL stream
             if (strpos($contentType, 'text/html') !== false) {
                 $baseUrl = rtrim($targetUrl, '/') . '/';
                 $response = str_replace('<head>', "<head>\n    <base href=\"$baseUrl\">", $response);
+                
+                // Rewrite otomatis jika ada tag img yang mengarah ke stream agar lewat proxy stream kita
+                // Mencari pola src="/?action=stream" atau sejenisnya
+                $streamProxyPath = base_url('/integration/stream?url=') . $baseUrl;
+                $response = str_replace('src="/?action=stream"', 'src="' . $streamProxyPath . '?action=stream"', $response);
             }
 
             return $this->response
@@ -513,5 +511,46 @@ class Integration extends BaseController
         } catch (\Exception $e) {
             return "Proxy Exception: " . $e->getMessage();
         }
+    /**
+     * Proxy khusus untuk Real-time Video Streaming (MJPEG)
+     * Mengalirkan data langsung dari OpenWrt ke Browser tanpa menunggu buffer selesai.
+     */
+    public function stream()
+    {
+        $targetUrl = $this->request->getVar('url');
+        if (!$targetUrl) return "No URL provided";
+
+        // Pastikan protokol benar
+        if (strpos($targetUrl, 'http') !== 0) $targetUrl = 'http://' . $targetUrl;
+
+        // 1. Matikan limit waktu eksekusi PHP agar stream tidak putus tengah jalan
+        set_time_limit(0);
+
+        // 2. Set Header khusus MJPEG agar browser tahu ini adalah video stream
+        header('Content-Type: multipart/x-mixed-replace; boundary=boundarydonotcross');
+        header('Cache-Control: no-cache');
+        header('Connection: close');
+        header('Pragma: no-cache');
+
+        // 3. Buka koneksi langsung (Pass-through)
+        // Gunakan timeout pada context agar tidak hang jika kamera mati
+        $context = stream_context_create(['http' => ['timeout' => 10]]);
+        $fp = @fopen($targetUrl, 'rb', false, $context);
+
+        if ($fp) {
+            // Bersihkan buffer output sebelum mulai
+            if (ob_get_level()) ob_end_clean();
+
+            // Alirkan data secara realtime per 8KB
+            while (!feof($fp) && connection_status() == 0) {
+                echo fread($fp, 8192);
+                flush(); // Paksa data keluar ke browser saat ini juga
+            }
+            fclose($fp);
+        } else {
+            header('Content-Type: text/plain', true, 500);
+            echo "Koneksi ke Kamera Gagal. Cek IP: " . $targetUrl;
+        }
+        exit;
     }
 }

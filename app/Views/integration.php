@@ -483,6 +483,11 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl) {
     const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
     currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
     
+    // Simpan URL stream murni untuk keperluan lain
+    const normalizedPath = streamPath.startsWith('/') ? streamPath : '/' + streamPath;
+    const rawStreamUrl = `http://${deviceIp}:${devicePort}${normalizedPath}`;
+    currentDeviceStreamUrl = `/integration/stream?url=` + encodeURIComponent(rawStreamUrl);
+    
     // Show modal with loading state
     statusLabel.textContent = `Sedang memindai ${deviceIp}:${devicePort} (via Proxy)...`;
     statusLabel.className = "text-blue-400 animate-pulse";
