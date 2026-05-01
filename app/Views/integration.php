@@ -484,24 +484,20 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, m
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    // Pastikan variabel tidak undefined
-    const safeIp = deviceIp || '';
-    const safePort = devicePort || 80;
-    const safePath = streamPath || '';
-    const safePageUrl = pageUrl || '';
-
-    // Bersihkan IP dari protokol
-    const cleanIp = safeIp.replace('http://', '').replace('https://', '');
-    const protocol = (safePort == 443) ? 'https' : 'http';
-    const baseUrl = `${protocol}://${cleanIp}:${safePort}`;
-    const rawUrl = safePageUrl || baseUrl;
+    const cleanIp = deviceIp.replace('http://', '').replace('https://', '');
+    const protocol = (devicePort == 443) ? 'https' : 'http';
+    const baseUrl = `${protocol}://${cleanIp}:${devicePort}`;
+    const directUrl = pageUrl || baseUrl;
     
-    // Bangun URL Proxy
-    const finalUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
+    if (mode === 'scanner') {
+        const path = streamPath || ((devicePort == 1984 || devicePort == 1884) ? '/api/stream.mjpeg?src=kamera_absensi' : '/?action=stream');
+        window.location.href = `/integration/scanner?ip=${cleanIp}&port=${devicePort}&path=${encodeURIComponent(path)}`;
+        return;
+    }
 
-    statusLabel.textContent = `Menghubungkan via Bridge ke ${cleanIp}...`;
-    statusLabel.className = "text-blue-400 animate-pulse";
-    frame.src = finalUrl;
+    statusLabel.innerHTML = `Menghubungkan langsung ke <span class="font-bold text-white">${cleanIp}</span>...<br><span class="text-[10px] text-yellow-400">Pastikan Anda berada di jaringan yang sama atau aktifkan VPN di perangkat ini.</span>`;
+    statusLabel.className = "text-blue-400 text-center";
+    frame.src = directUrl;
     openDeviceModal();
 }
 
