@@ -511,6 +511,8 @@ class Integration extends BaseController
         } catch (\Exception $e) {
             return "Proxy Exception: " . $e->getMessage();
         }
+    }
+
     /**
      * Proxy khusus untuk Real-time Video Streaming (MJPEG)
      * Mengalirkan data langsung dari OpenWrt ke Browser tanpa menunggu buffer selesai.
