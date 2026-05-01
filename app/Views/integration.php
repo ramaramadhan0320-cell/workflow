@@ -476,12 +476,18 @@ function closeDeviceModal() {
     document.getElementById('deviceStatus').textContent = 'Menunggu koneksi...';
 }
 
-async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl) {
+async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, mode = 'proxy') {
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    // Gunakan Scanner Internal yang baru (Premium)
-    currentDeviceUrl = `/integration/scanner?ip=${deviceIp}&port=${devicePort}`;
+    // Gunakan Proxy Umum secara default (untuk dashboard HTML IoT)
+    const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
+    
+    if (mode === 'scanner') {
+        currentDeviceUrl = `/integration/scanner?ip=${deviceIp}&port=${devicePort}`;
+    } else {
+        currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
+    }
     
     // Simpan URL stream untuk keperluan internal
     const normalizedPath = streamPath.startsWith('/') ? streamPath : '/' + streamPath;

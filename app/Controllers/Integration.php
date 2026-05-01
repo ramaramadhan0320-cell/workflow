@@ -549,48 +549,43 @@ class Integration extends BaseController
      */
     public function stream()
     {
-        // PENTING: Lepaskan kunci session agar aplikasi tidak freeze/hang
         if (session_get_cookie_params()) {
             session_write_close();
         }
 
         $targetUrl = $this->request->getVar('url');
         if (!$targetUrl) return "No URL provided";
-
         if (strpos($targetUrl, 'http') !== 0) $targetUrl = 'http://' . $targetUrl;
 
-        // 1. Matikan limit waktu & Buffering
         set_time_limit(0);
         
-        // Header agar Nginx Proxy Manager / Cloudflare tidak menahan data (Buffering)
         header('X-Accel-Buffering: no'); 
         header('Content-Type: multipart/x-mixed-replace; boundary=boundarydonotcross');
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Connection: close');
         header('Pragma: no-cache');
 
-        // 2. Buka koneksi langsung
-        $context = stream_context_create(['http' => ['timeout' => 15]]);
-        $fp = fopen($targetUrl, 'rb', false, $context);
+        if (ob_get_level()) ob_end_clean();
 
-        if ($fp) {
-            // Matikan kompresi GZIP jika ada karena bisa merusak stream MJPEG
-            if (function_exists('apache_setenv')) {
-                @apache_setenv('no-gzip', 1);
-            }
-            @ini_set('zlib.output_compression', 0);
+        // Gunakan CURL Callback (Jauh lebih stabil untuk streaming MJPEG)
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $targetUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 8192);
+        curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 0); // No timeout for stream
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        
+        // Fungsi untuk meneruskan data secara langsung saat diterima
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
+            echo $data;
+            flush();
+            return strlen($data);
+        });
 
-            if (ob_get_level()) ob_end_clean();
-
-            while (!feof($fp) && connection_status() == 0) {
-                echo fread($fp, 8192);
-                flush(); 
-            }
-            fclose($fp);
-        } else {
-            header('Content-Type: text/plain', true, 500);
-            echo "Koneksi ke Kamera Gagal. Cek IP: " . $targetUrl;
-        }
+        curl_exec($ch);
+        curl_close($ch);
         exit;
     }
 }
