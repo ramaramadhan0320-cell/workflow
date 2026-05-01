@@ -45,7 +45,7 @@ class Announcement extends BaseController
             return $user;
         }
 
-        $isAdmin = ($user['role'] === 'admin');
+        $isAdmin = (($user['role'] ?? '') === 'admin');
         $announcements = $this->announcementModel->getVisibleAnnouncements($user['id'], $isAdmin);
 
         return $this->response->setJSON([
@@ -64,7 +64,7 @@ class Announcement extends BaseController
             return $user;
         }
 
-        $isAdmin = ($user['role'] === 'admin');
+        $isAdmin = (($user['role'] ?? '') === 'admin');
         $canCreate = ($isAdmin || ($user['can_announce'] ?? 0) == 1);
 
         if (!$canCreate) {
@@ -113,7 +113,7 @@ class Announcement extends BaseController
             return $user;
         }
 
-        if ($user['role'] !== 'admin') {
+        if (($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON([
                 'status' => 403,
                 'message' => 'Hanya admin yang bisa menyetujui'
@@ -140,7 +140,7 @@ class Announcement extends BaseController
             return $user;
         }
 
-        if ($user['role'] !== 'admin') {
+        if (($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON([
                 'status' => 403,
                 'message' => 'Hanya admin yang bisa menolak'
@@ -176,7 +176,7 @@ class Announcement extends BaseController
         }
 
         // Only admin can delete
-        if ($user['role'] !== 'admin') {
+        if (($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON([
                 'status' => 403,
                 'message' => 'Hanya admin yang dapat menghapus pengumuman'
@@ -203,7 +203,7 @@ class Announcement extends BaseController
             return $admin;
         }
 
-        if ($admin['role'] !== 'admin') {
+        if (($admin['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON([
                 'status' => 403,
                 'message' => 'Akses ditolak'

@@ -23,7 +23,7 @@ class Roles extends BaseController
         $userId = session()->get('id');
         $currentUser = $this->userModel->find($userId);
         
-        if ($currentUser['role'] !== 'admin') {
+        if (($currentUser['role'] ?? '') !== 'admin') {
             return redirect()->to('/dashboard')->with('error', 'Akses ditolak. Hanya admin yang dapat mengakses halaman ini.');
         }
 
@@ -42,7 +42,7 @@ class Roles extends BaseController
         $userId = session()->get('id');
         $currentUser = $this->userModel->find($userId);
 
-        if ($currentUser['role'] !== 'admin') {
+        if (($currentUser['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Forbidden']);
         }
 
@@ -91,7 +91,7 @@ class Roles extends BaseController
         $userId = session()->get('id');
         $currentUser = $this->userModel->find($userId);
 
-        if ($currentUser['role'] !== 'admin') {
+        if (($currentUser['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Forbidden']);
         }
 
@@ -150,7 +150,7 @@ class Roles extends BaseController
         $userId = session()->get('id');
         $currentUser = $this->userModel->find($userId);
 
-        if ($currentUser['role'] !== 'admin') {
+        if (($currentUser['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Forbidden']);
         }
 

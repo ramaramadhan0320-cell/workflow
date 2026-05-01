@@ -54,7 +54,7 @@
             <a href="/roles" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="user-check"></i><span>Roles</span></a>
             <a href="/announcement" class="flex items-center gap-3 bg-white/10 p-2 rounded-lg transition"><i data-lucide="megaphone"></i><span>Announcement</span></a>
             <a href="/bank-file" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="folder"></i><span>Bank File</span></a>
-            <?php if ($user && $user['role'] === 'admin'): ?>
+            <?php if ($user && ($user['role'] ?? '') === 'admin'): ?>
             <a href="/payment-management" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="banknote"></i><span>Management Payment</span></a>
             <?php endif; ?>
             <a href="/integration" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="cable"></i><span>Integrasi IoT</span></a>
@@ -80,7 +80,7 @@
                 <p class="text-white/50 text-xs mt-1">Pusat informasi dan pengumuman sistem</p>
             </div>
             <div class="flex gap-2">
-                <?php if ($user['role'] === 'admin'): ?>
+                <?php if (($user['role'] ?? '') === 'admin'): ?>
                 <a href="/announcement/permissions" class="bg-white/10 hover:bg-white hover:text-gray-900 px-3 py-2 rounded-xl text-xs font-bold uppercase transition flex items-center gap-2">
                     <i data-lucide="shield-check" class="w-4 h-4"></i>
                     Akses Izin
@@ -130,7 +130,7 @@
                                     <span class="bg-red-500/20 text-red-400 text-[9px] px-2 py-1 rounded-full border border-red-500/30 uppercase font-bold tracking-tighter">Rejected</span>
                                 <?php endif; ?>
 
-                                <?php if ($user['role'] === 'admin'): ?>
+                                <?php if (($user['role'] ?? '') === 'admin'): ?>
                                     <button onclick="confirmDelete(<?= $a['id'] ?>)" class="p-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-lg transition opacity-0 group-hover:opacity-100">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
@@ -142,7 +142,7 @@
                             <?= esc($a['content']) ?>
                         </div>
 
-                        <?php if ($user['role'] === 'admin' && $a['status'] === 'pending'): ?>
+                        <?php if (($user['role'] ?? '') === 'admin' && $a['status'] === 'pending'): ?>
                             <div class="mt-6 flex gap-3 border-t border-white/5 pt-4">
                                 <button onclick="approve(<?= $a['id'] ?>)" class="flex-1 bg-green-500/20 hover:bg-green-500 text-green-400 hover:text-white py-2 rounded-xl text-[10px] font-bold uppercase transition flex items-center justify-center gap-2">
                                     <i data-lucide="check" class="w-4 h-4"></i> Setujui

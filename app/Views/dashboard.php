@@ -61,7 +61,7 @@
             <a href="/roles" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="user-check"></i><span>Roles</span></a>
             <a href="/announcement" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="megaphone"></i><span>Announcement</span></a>
             <a href="/bank-file" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="folder"></i><span>Bank File</span></a>
-            <?php if ($user && $user['role'] === 'admin'): ?>
+            <?php if ($user && ($user['role'] ?? '') === 'admin'): ?>
             <a href="/payment-management" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="banknote"></i><span>Management Payment</span></a>
             <?php endif; ?>
             <a href="/integration" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="cable"></i><span>Integrasi IoT</span></a>
@@ -142,7 +142,7 @@
                     <span class="text-[10px] md:text-xs uppercase tracking-widest">Payment</span>
                 </div>
             </a>
-            <?php if ($user && $user['role'] === 'admin'): ?>
+            <?php if ($user && ($user['role'] ?? '') === 'admin'): ?>
             <a href="/report" class="group">
                 <div class="glass rounded-2xl p-4 text-center group-hover:bg-white/20 transition-all border border-white/5 shadow-md">
                     <i data-lucide="file-text" class="w-7 h-7 md:w-10 md:h-10 mx-auto mb-2 opacity-80 group-hover:scale-110 transition"></i>

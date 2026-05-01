@@ -38,9 +38,8 @@ class Dashboard extends ResourceController
             'status' => 200,
             'message' => 'Dashboard summary berhasil diambil',
             'data' => [
-                'user' => [
                     'username' => $user['username'],
-                    'role' => $user['role'],
+                    'role' => $user['role'] ?? '',
                     'gaji_total' => $user['gaji_total']
                 ],
                 'tasks_count' => $taskModel->countAllResults(),

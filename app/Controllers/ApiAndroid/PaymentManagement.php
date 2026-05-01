@@ -21,7 +21,7 @@ class PaymentManagement extends ResourceController
 
         $userModel = new UserModel();
         $admin = $userModel->find($adminId);
-        if (!$admin || $admin['role'] !== 'admin') {
+        if (!$admin || ($admin['role'] ?? '') !== 'admin') {
             return $this->respond(['status' => 403, 'message' => 'Access denied. Admin only.'], 403);
         }
 

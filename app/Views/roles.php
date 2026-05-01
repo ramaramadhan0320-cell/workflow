@@ -82,7 +82,7 @@
             <a href="/roles" class="flex items-center gap-3 bg-white/10 p-2 rounded-lg transition"><i data-lucide="user-check"></i><span>Roles</span></a>
             <a href="/announcement" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="megaphone"></i><span>Announcement</span></a>
             <a href="/bank-file" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="folder"></i><span>Bank File</span></a>
-            <?php if ($user && $user['role'] === 'admin'): ?>
+            <?php if ($user && ($user['role'] ?? '') === 'admin'): ?>
             <a href="/payment-management" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="banknote"></i><span>Management Payment</span></a>
             <?php endif; ?>
             <a href="/integration" class="flex items-center gap-3 hover:bg-white/10 p-2 rounded-lg transition"><i data-lucide="cable"></i><span>Integrasi IoT</span></a>
@@ -160,7 +160,7 @@
                             <div class="flex gap-2 justify-end flex-wrap sm:flex-nowrap">
                                 <span class="sm:hidden role-badge role-<?= esc($displayRole) ?>"><?= esc($displayRole) ?></span>
                                 <span class="sm:hidden text-xs text-white/70"><?= number_format($u['gaji_total'] ?? 0, 0, ',', '.') ?></span>
-                                <button class="edit-btn bg-blue-500/50 hover:bg-blue-600 p-2 rounded transition" data-id="<?= $u['id'] ?>" data-username="<?= esc($u['username']) ?>" data-role="<?= esc($u['role']) ?>" data-gaji="<?= esc($u['gaji_total'] ?? 0) ?>" title="Edit">
+                                <button class="edit-btn bg-blue-500/50 hover:bg-blue-600 p-2 rounded transition" data-id="<?= $u['id'] ?>" data-username="<?= esc($u['username']) ?>" data-role="<?= esc($u['role'] ?? '') ?>" data-gaji="<?= esc($u['gaji_total'] ?? 0) ?>" title="Edit">
                                     <i data-lucide="edit" class="w-4 h-4"></i>
                                 </button>
                                 <?php if ($u['id'] !== $user['id']): ?>

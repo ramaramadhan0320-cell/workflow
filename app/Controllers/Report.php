@@ -32,7 +32,7 @@ class Report extends BaseController
         $user = $userModel->find($userId);
 
         // Check if user is admin
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return redirect()->to('/dashboard')->with('error', 'Hanya admin yang bisa akses halaman ini');
         }
 
@@ -270,7 +270,7 @@ class Report extends BaseController
 
         $userId = session()->get('id');
         $user = $this->userModel->find($userId);
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return redirect()->to('/dashboard')->with('error', 'Hanya admin yang bisa akses fitur ini');
         }
 
@@ -448,7 +448,7 @@ class Report extends BaseController
         $user = $userModel->find($userId);
 
         // Check role
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response
                 ->setStatusCode(403)
                 ->setHeader('Content-Type', 'application/json')
@@ -507,7 +507,7 @@ class Report extends BaseController
         $user = $userModel->find($userId);
 
         // Check role
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'Hanya admin yang bisa menambah transaksi']);
         }
 
@@ -584,7 +584,7 @@ class Report extends BaseController
         $user = $userModel->find($userId);
 
         // Check role
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'Hanya admin yang bisa menghapus transaksi']);
         }
 

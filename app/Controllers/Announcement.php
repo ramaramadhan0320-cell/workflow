@@ -28,7 +28,7 @@ class Announcement extends BaseController
         $user = $this->checkAuth();
         if (!$user) return redirect()->to('/login');
 
-        $isAdmin = ($user['role'] === 'admin');
+        $isAdmin = (($user['role'] ?? '') === 'admin');
         $data = [
             'user' => $user,
             'announcements' => $this->announcementModel->getVisibleAnnouncements($user['id'], $isAdmin),
@@ -43,7 +43,7 @@ class Announcement extends BaseController
         $user = $this->checkAuth();
         if (!$user) return $this->response->setJSON(['success' => false, 'message' => 'Unauthorized']);
 
-        $isAdmin = ($user['role'] === 'admin');
+        $isAdmin = (($user['role'] ?? '') === 'admin');
         $canCreate = ($isAdmin || ($user['can_announce'] ?? 0) == 1);
 
         if (!$canCreate) {
@@ -75,7 +75,7 @@ class Announcement extends BaseController
     public function approve($id)
     {
         $user = $this->checkAuth();
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setJSON(['success' => false, 'message' => 'Hanya admin yang bisa menyetujui']);
         }
 
@@ -89,7 +89,7 @@ class Announcement extends BaseController
     public function reject($id)
     {
         $user = $this->checkAuth();
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setJSON(['success' => false, 'message' => 'Hanya admin yang bisa menolak']);
         }
 
@@ -109,7 +109,7 @@ class Announcement extends BaseController
         if (!$announcement) return $this->response->setJSON(['success' => false, 'message' => 'Data tidak ditemukan']);
 
         // Only admin can delete
-        if ($user['role'] !== 'admin') {
+        if (($user['role'] ?? '') !== 'admin') {
             return $this->response->setJSON(['success' => false, 'message' => 'Hanya admin yang dapat menghapus pengumuman']);
         }
 
@@ -123,7 +123,7 @@ class Announcement extends BaseController
     public function permissions()
     {
         $user = $this->checkAuth();
-        if (!$user || $user['role'] !== 'admin') return redirect()->to('/dashboard');
+        if (!$user || ($user['role'] ?? '') !== 'admin') return redirect()->to('/dashboard');
 
         $data = [
             'user' => $user,
@@ -136,7 +136,7 @@ class Announcement extends BaseController
     public function togglePermission($userId)
     {
         $admin = $this->checkAuth();
-        if (!$admin || $admin['role'] !== 'admin') {
+        if (!$admin || ($admin['role'] ?? '') !== 'admin') {
             return $this->response->setJSON(['success' => false, 'message' => 'Akses ditolak']);
         }
 

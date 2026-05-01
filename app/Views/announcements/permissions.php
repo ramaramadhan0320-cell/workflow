@@ -54,11 +54,11 @@
                             </div>
                             <div>
                                 <h3 class="font-bold text-sm"><?= esc($u['username']) ?></h3>
-                                <p class="text-[10px] text-white/40 uppercase tracking-widest"><?= esc($u['role']) ?></p>
+                                <p class="text-[10px] text-white/40 uppercase tracking-widest"><?= esc($u['role'] ?? '') ?></p>
                             </div>
                         </div>
 
-                        <?php if ($u['role'] === 'admin'): ?>
+                        <?php if (($u['role'] ?? '') === 'admin'): ?>
                             <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">Full Access</span>
                         <?php else: ?>
                             <button onclick="toggle(<?= $u['id'] ?>, this)" 

@@ -46,7 +46,7 @@ class BankFile extends BaseController
             'status' => 200,
             'message' => 'Success',
             'data' => $files,
-            'is_admin' => ($user['role'] === 'admin')
+            'is_admin' => (($user['role'] ?? '') === 'admin')
         ]);
     }
 
@@ -229,7 +229,7 @@ class BankFile extends BaseController
         $user = $this->validateUser();
         if ($user instanceof \CodeIgniter\HTTP\Response) return $user;
 
-        if ($user['role'] !== 'admin') {
+        if (($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['status' => 403, 'message' => 'Hanya admin yang dapat menghapus file']);
         }
 

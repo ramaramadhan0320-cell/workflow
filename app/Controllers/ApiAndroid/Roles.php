@@ -32,7 +32,7 @@ class Roles extends BaseController
             ]);
         }
 
-        if ($user['role'] !== 'admin') {
+        if (($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON([
                 'status' => 403,
                 'message' => 'Akses ditolak. Hanya admin yang dapat mengakses halaman ini.'

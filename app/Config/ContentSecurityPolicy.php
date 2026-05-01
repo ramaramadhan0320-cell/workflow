@@ -120,45 +120,6 @@ class ContentSecurityPolicy extends BaseConfig
      * @var list<string>|string
      */
     public $childSrc = ['self', '*'];
-
-    /**
-     * Limits the origins that you can connect to (via XHR,
-     * WebSockets, and EventSource).
-     *
-     * @var list<string>|string
-     */
-    public $connectSrc = 'self';
-
-    /**
-     * Specifies the origins that can serve web fonts.
-     *
-     * @var list<string>|string
-     */
-    public $fontSrc = ['self', 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'];
-
-    /**
-     * Lists valid endpoints for submission from `<form>` tags.
-     *
-     * @var list<string>|string
-     */
-    public $formAction = 'self';
-
-    /**
-     * Specifies the sources that can embed the current page.
-     * This directive applies to `<frame>`, `<iframe>`, `<embed>`,
-     * and `<applet>` tags. This directive can't be used in
-     * `<meta>` tags and applies only to non-HTML resources.
-     *
-     * @var list<string>|string|null
-     */
-    public $frameAncestors;
-
-    /**
-     * The frame-src directive restricts the URLs which may
-     * be loaded into nested browsing contexts.
-     *
-     * @var list<string>|string|null
-     */
     public $frameSrc = ['self', '*'];
 
     /**

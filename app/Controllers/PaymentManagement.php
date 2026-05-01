@@ -22,7 +22,7 @@ class PaymentManagement extends BaseController
         $userModel = new UserModel();
         $user = $userModel->find($userId);
 
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return redirect()->to('/dashboard')->with('error', 'Access denied. Admin only.');
         }
 
@@ -155,7 +155,7 @@ class PaymentManagement extends BaseController
         $userModel = new UserModel();
         $user = $userModel->find($userId);
 
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Access denied. Admin only.']);
         }
 
@@ -198,7 +198,7 @@ class PaymentManagement extends BaseController
             $userModel = new UserModel();
             $user = $userModel->find($userId);
 
-            if (!$user || $user['role'] !== 'admin') {
+            if (!$user || ($user['role'] ?? '') !== 'admin') {
                 return $this->response->setJSON([
                     'status' => 403,
                     'message' => 'Access denied. Admin only.'
@@ -376,7 +376,7 @@ class PaymentManagement extends BaseController
             $userModel = new UserModel();
             $user = $userModel->find($userId);
 
-            if (!$user || $user['role'] !== 'admin') {
+            if (!$user || ($user['role'] ?? '') !== 'admin') {
                 return redirect()->to('/dashboard')->with('error', 'Access denied. Admin only.');
             }
 
@@ -485,7 +485,7 @@ class PaymentManagement extends BaseController
         $userModel = new UserModel();
         $user = $userModel->find($userId);
 
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Access denied. Admin only.']);
         }
 
@@ -745,7 +745,7 @@ class PaymentManagement extends BaseController
         $userModel = new UserModel();
         $user = $userModel->find($userId);
 
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Access denied. Admin only.']);
         }
 
@@ -944,7 +944,7 @@ class PaymentManagement extends BaseController
         $userModel = new UserModel();
         $user = $userModel->find($userId);
 
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Access denied. Admin only.']);
         }
 
@@ -1000,7 +1000,7 @@ class PaymentManagement extends BaseController
         $userModel = new UserModel();
         $user = $userModel->find($userId);
 
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Access denied. Admin only.']);
         }
 
@@ -1055,7 +1055,7 @@ class PaymentManagement extends BaseController
         $userModel = new UserModel();
         $user = $userModel->find($userId);
 
-        if (!$user || $user['role'] !== 'admin') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
             return $this->response->setStatusCode(403)->setJSON(['success' => false, 'message' => 'Access denied. Admin only.']);
         }
 
