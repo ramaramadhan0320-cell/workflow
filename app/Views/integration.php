@@ -212,6 +212,10 @@
                             <i data-lucide="plus" class="w-3 h-3"></i>
                             Tambah Device
                         </button>
+                        <button onclick="openAddScannerModal()" class="bg-purple-500/80 hover:bg-purple-600 px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition flex items-center gap-1">
+                            <i data-lucide="qr-code" class="w-3 h-3"></i>
+                            Tambah Interface Scanner
+                        </button>
                     </div>
                 </div>
 
@@ -642,14 +646,8 @@ function displayDevices(devices) {
                     <span class="text-white/40 text-[9px]">${device.last_seen ? new Date(device.last_seen).toLocaleDateString('id-ID') : 'Never'}</span>
                 </div>
                 <div class="flex gap-2 justify-end sm:justify-end">
-                    <!-- Tombol Monitor (Selalu Proxy / Halaman Asli) -->
-                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || ''}', '${device.page_url}', 'proxy')" class="bg-blue-500/60 hover:bg-blue-600 p-2 rounded-lg transition-all text-xs" title="Buka Halaman Asli (Proxy)">
+                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || ''}', '${device.page_url}', 'proxy')" class="bg-blue-500/60 hover:bg-blue-600 p-2 rounded-lg transition-all text-xs" title="Buka Halaman Asli">
                         <i data-lucide="monitor" class="w-3 h-3"></i>
-                    </button>
-                    
-                    <!-- Tombol Scanner (Selalu Mode Scanner Workflow) -->
-                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || ''}', '${device.page_url}', 'scanner')" class="bg-purple-500/60 hover:bg-purple-600 p-2 rounded-lg transition-all text-xs" title="Buka Mode Scanner">
-                        <i data-lucide="qr-code" class="w-3 h-3"></i>
                     </button>
                     <button onclick="checkDeviceStatus(${device.id})" class="bg-green-500/60 hover:bg-green-600 p-2 rounded-lg transition-all text-xs" title="Cek Status">
                         <i data-lucide="activity" class="w-3 h-3"></i>
@@ -1114,6 +1112,83 @@ function copyQrString() {
             </button>
         </div>
     </div>
+
+    <!-- Add Scanner Modal -->
+    <div id="addScannerModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div class="glass rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                <i data-lucide="qr-code" class="w-6 h-6"></i>
+                Tambah Interface Scanner
+            </h2>
+            
+            <form id="addScannerForm" onsubmit="addNewScannerSubmit(event)" class="space-y-4">
+                <div>
+                    <label class="block text-white/80 text-sm font-medium mb-2">Nama Scanner *</label>
+                    <input type="text" id="scannerName" placeholder="Contoh: Scanner Absensi Pintu Depan" class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-blue-400" required>
+                </div>
+
+                <div>
+                    <label class="block text-white/80 text-sm font-medium mb-2">Link Streaming (Domain/URL) *</label>
+                    <input type="text" id="scannerUrl" placeholder="Contoh: ab.daftartugasku.my.id" class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-blue-400" required>
+                    <p class="text-white/40 text-[10px] mt-2">Gunakan domain HTTPS dari Nginx Proxy Manager untuk hasil terbaik.</p>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeAddScannerModal()" class="flex-1 bg-gray-500/60 hover:bg-gray-600 text-white py-2 rounded-lg transition font-medium">
+                        Batal
+                    </button>
+                    <button type="submit" class="flex-1 bg-purple-500/80 hover:bg-purple-600 text-white py-2 rounded-lg transition font-medium flex items-center justify-center gap-2">
+                        <i data-lucide="check" class="w-4 h-4"></i>
+                        Simpan Scanner
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script for Scanner Modal -->
+    <script>
+    function openAddScannerModal() {
+        document.getElementById('addScannerModal').classList.remove('hidden');
+    }
+
+    function closeAddScannerModal() {
+        document.getElementById('addScannerModal').classList.add('hidden');
+        document.getElementById('addScannerForm').reset();
+    }
+
+    async function addNewScannerSubmit(event) {
+        event.preventDefault();
+        const name = document.getElementById('scannerName').value.trim();
+        const url = document.getElementById('scannerUrl').value.trim();
+
+        // Kita simpan sebagai tipe 'scanner' di database
+        // Kita gunakan IP untuk menyimpan Domain, dan Port 443 (HTTPS)
+        try {
+            const response = await fetch('/integration/add-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({
+                    device_name: name,
+                    device_ip: url,
+                    device_port: 443,
+                    stream_path: '/api/stream.mjpeg?src=kamera_absensi', // Default go2rtc path
+                    location: 'Scanner Interface'
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert('Scanner Interface berhasil ditambahkan!');
+                closeAddScannerModal();
+                loadDevices();
+            } else {
+                alert('Error: ' + result.message);
+            }
+        } catch (error) {
+            alert('Gagal menyimpan scanner');
+        }
+    }
+    </script>
 
 </body>
 </html>

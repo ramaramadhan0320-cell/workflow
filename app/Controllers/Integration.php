@@ -592,31 +592,44 @@ class Integration extends BaseController
 
         if (ob_get_level()) ob_end_clean();
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $targetUrl);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-        
-        // Proxy Header dari Kamera ke Browser
-        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $header) {
-            header($header);
-            return strlen($header);
-        });
+        $parsedUrl = parse_url($targetUrl);
+        $host = $parsedUrl['host'];
+        $port = $parsedUrl['port'] ?? 80;
+        $path = ($parsedUrl['path'] ?? '/') . (isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '');
 
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
-            echo $data;
-            if (connection_aborted()) return 0;
+        $fp = @fsockopen($host, $port, $errno, $errstr, 30);
+        if (!$fp) {
+            header("HTTP/1.1 500 Internal Server Error");
+            echo "Proxy Error: $errstr ($errno)";
+            return;
+        }
+
+        // Send request to source
+        fputs($fp, "GET $path HTTP/1.0\r\n");
+        fputs($fp, "Host: $host\r\n");
+        fputs($fp, "User-Agent: Mozilla/5.0\r\n");
+        fputs($fp, "Connection: close\r\n\r\n");
+
+        // Simple Header Proxy
+        $headerFinished = false;
+        while (!$headerFinished && !feof($fp)) {
+            $line = fgets($fp, 4096);
+            if (trim($line) == "") {
+                $headerFinished = true;
+            } else {
+                if (stripos($line, 'Content-Type') !== false) {
+                    header($line);
+                }
+            }
+        }
+
+        // Stream Body
+        while (!feof($fp) && connection_status() == 0) {
+            echo fread($fp, 8192);
             flush();
-            return strlen($data);
-        });
-        
-        curl_setopt($ch, CURLOPT_TIMEOUT, 0); 
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_BUFFERSIZE, 8192);
-        curl_setopt($ch, CURLOPT_TCP_KEEPALIVE, 1);
+        }
 
-        curl_exec($ch);
-        curl_close($ch);
+        fclose($fp);
         exit;
     }
 }
