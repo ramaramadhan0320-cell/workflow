@@ -18,10 +18,16 @@ class Integration extends BaseController
 
         $userModel = new \App\Models\UserModel();
         $user = $userModel->find(session()->get('userId'));
+        
+        // Jika $user adalah object, ubah ke array untuk kecocokan view
+        if (is_object($user)) {
+            $user = (array) $user;
+        }
 
         return view('integration', [
             'title' => 'Integrasi IoT',
-            'user'  => $user
+            'user'  => $user,
+            'role'  => session()->get('role') // Kirim role langsung dari session sebagai cadangan
         ]);
     }
 
