@@ -481,11 +481,6 @@ class Integration extends BaseController
         ]);
     }
 
-        return view('iot_scanner', [
-            'streamUrl' => $streamUrl
-        ]);
-    }
-
     /**
      * Proxy untuk mengambil tampilan web IoT agar tidak diblokir browser (Mixed Content/PNA)
      * URL: /integration/proxy?url=http://192.168.1.1
