@@ -2,110 +2,27 @@
 
 namespace App\Controllers;
 
+use App\Models\IotDeviceModel;
+use CodeIgniter\Controller;
+
 class Integration extends BaseController
 {
+    /**
+     * Tampilan utama integrasi IoT
+     */
     public function index()
     {
         if (!session()->get('isLoggedIn')) {
-            return redirect()->to('/');
+            return redirect()->to('/login');
         }
 
-        // Get current user untuk check role
-        $userModel = new \App\Models\UserModel();
-        $userId = session()->get('id');
-        $data['user'] = $userModel->find($userId);
-        $data['username'] = session()->get('username');
-
-        return view('integration', $data);
-    }
-
-    public function processAbsensi()
-    {
-        if (!session()->get('isLoggedIn')) {
-            return $this->response->setJSON(['success' => false, 'message' => 'Not logged in']);
-        }
-
-        if (strtolower($this->request->getMethod()) !== 'post') {
-            return $this->response->setJSON(['success' => false, 'message' => 'Invalid method']);
-        }
-
-        $json = $this->request->getJSON(true) ?: $this->request->getPost();
-        $qrData = $json['qr_data'] ?? '';
-        $deviceIp = $json['device_ip'] ?? '';
-
-        if (empty($qrData)) {
-            return $this->response->setJSON(['success' => false, 'message' => 'QR data is required']);
-        }
-
-        try {
-            // Parse QR data (assuming format: USER_ID|TIMESTAMP|LOCATION)
-            // Example: "1|2024-01-03 08:30:00|Office Main Entrance"
-            $qrParts = explode('|', $qrData);
-            if (count($qrParts) < 2) {
-                return $this->response->setJSON(['success' => false, 'message' => 'Invalid QR format']);
-            }
-
-            $userId = $qrParts[0];
-            $timestamp = $qrParts[1] ?? date('Y-m-d H:i:s');
-            $location = $qrParts[2] ?? 'ESP32 Cam';
-
-            // Get user data
-            $userModel = new \App\Models\UserModel();
-            $user = $userModel->find($userId);
-
-            if (!$user) {
-                return $this->response->setJSON(['success' => false, 'message' => 'User not found']);
-            }
-
-            // Check if already absen today using IotAttendanceModel
-            $iotAttendanceModel = new \App\Models\IotAttendanceModel();
-            if ($iotAttendanceModel->hasCheckedInToday($userId)) {
-                $existing = $iotAttendanceModel->where('user_id', $userId)
-                                              ->where('status', 'masuk')
-                                              ->where('DATE(scan_time)', date('Y-m-d'))
-                                              ->first();
-                return $this->response->setJSON([
-                    'success' => false,
-                    'message' => 'User already checked in today at ' . date('H:i', strtotime($existing['scan_time']))
-                ]);
-            }
-
-            // Insert IoT absensi record
-            $data = [
-                'user_id' => $userId,
-                'status' => 'masuk',
-                'scan_time' => date('Y-m-d H:i:s'),
-                'device_id' => $deviceIp,
-                'qr_content' => $qrData,
-                'is_valid' => 1
-            ];
-
-            if ($iotAttendanceModel->insert($data)) {
-                // Also insert to regular kehadiran table for compatibility
-                $kehadiranModel = new \App\Models\KehadiranModel();
-                $kehadiranData = [
-                    'user_id' => $userId,
-                    'tanggal' => date('Y-m-d H:i:s'),
-                    'status' => 'present'
-                ];
-                $kehadiranModel->insert($kehadiranData);
-
-                return $this->response->setJSON([
-                    'success' => true,
-                    'message' => "Absensi IoT berhasil untuk {$user['username']} pada " . date('d/m/Y H:i') . " - Status: Masuk"
-                ]);
-            } else {
-                return $this->response->setJSON(['success' => false, 'message' => 'Failed to save IoT absensi']);
-            }
-
-        } catch (\Exception $e) {
-            log_message('error', 'Absensi processing error: ' . $e->getMessage());
-            return $this->response->setJSON(['success' => false, 'message' => 'Server error']);
-        }
+        return view('integration', [
+            'title' => 'Integrasi IoT'
+        ]);
     }
 
     /**
-     * Get all IoT devices
+     * Ambil daftar perangkat dari database
      */
     public function getDevices()
     {
@@ -113,24 +30,22 @@ class Integration extends BaseController
             return $this->response->setJSON(['success' => false, 'message' => 'Not logged in']);
         }
 
-        $iotDeviceModel = new \App\Models\IotDeviceModel();
-        $devices = $iotDeviceModel->getAllDevices();
-
-        $devices = array_map(function ($device) use ($iotDeviceModel) {
-            $device['stream_url'] = $iotDeviceModel->getStreamUrl($device['id']);
-            $device['page_url'] = $iotDeviceModel->getDevicePageUrl($device['id']);
-            return $device;
-        }, $devices);
-
-        return $this->response->setJSON([
-            'success' => true,
-            'data' => $devices,
-            'count' => count($devices)
-        ]);
+        try {
+            $iotDeviceModel = new \App\Models\IotDeviceModel();
+            $devices = $iotDeviceModel->getAllDevices();
+            
+            return $this->response->setJSON([
+                'success' => true,
+                'data' => $devices
+            ]);
+        } catch (\Exception $e) {
+            log_message('error', 'Get devices error: ' . $e->getMessage());
+            return $this->response->setJSON(['success' => false, 'message' => 'Server error']);
+        }
     }
 
     /**
-     * Add new IoT device
+     * Tambah perangkat baru
      */
     public function addDevice()
     {
@@ -138,130 +53,58 @@ class Integration extends BaseController
             return $this->response->setJSON(['success' => false, 'message' => 'Not logged in']);
         }
 
-        if (strtolower($this->request->getMethod()) !== 'post') {
-            return $this->response->setJSON(['success' => false, 'message' => 'Invalid method']);
-        }
-
-        $json = $this->request->getJSON(true) ?: $this->request->getPost();
-        $deviceIp = $json['device_ip'] ?? '';
-        $deviceName = $json['device_name'] ?? 'IoT Device';
-        $devicePort = !empty($json['device_port']) ? intval($json['device_port']) : 80;
-        $streamPath = trim($json['stream_path'] ?? '/stream');
-        $location = $json['location'] ?? 'Unknown';
-
-        if ($streamPath === '') {
-            $streamPath = '/stream';
-        }
-        if ($streamPath[0] !== '/') {
-            $streamPath = '/' . $streamPath;
-        }
-
-        if (empty($deviceIp)) {
-            return $this->response->setJSON(['success' => false, 'message' => 'Device IP is required']);
-        }
-
         try {
+            $data = $this->request->getJSON(true);
+            
+            if (empty($data['device_name']) || empty($data['device_ip'])) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Name and IP are required']);
+            }
+
+            // Sanitasi IP (Hapus port jika user memasukkannya di kolom IP)
+            if (strpos($data['device_ip'], ':') !== false) {
+                $parts = explode(':', $data['device_ip']);
+                $data['device_ip'] = $parts[0];
+                if (empty($data['device_port'])) $data['device_port'] = $parts[1];
+            }
+
             $iotDeviceModel = new \App\Models\IotDeviceModel();
+            $iotDeviceModel->addDevice([
+                'device_name' => $data['device_name'],
+                'device_ip'   => $data['device_ip'],
+                'device_port' => $data['device_port'] ?? 80,
+                'stream_path' => $data['stream_path'] ?? '',
+                'page_url'    => $data['page_url'] ?? '',
+                'location'    => $data['location'] ?? '',
+                'status'      => 'offline'
+            ]);
 
-            // Auto-fix jika user memasukkan port di kolom IP (misal 192.168.1.1:1984)
-            if (strpos($deviceIp, ':') !== false) {
-                $parts = explode(':', $deviceIp);
-                $deviceIp = $parts[0];
-                $devicePort = intval($parts[1]);
-            }
-
-            // Check if device already exists on same IP and port
-            $existing = $iotDeviceModel->getDeviceByIpPort($deviceIp, $devicePort);
-            if ($existing) {
-                return $this->response->setJSON([
-                    'success' => false,
-                    'message' => 'Device dengan IP dan port ini sudah terdaftar'
-                ]);
-            }
-
-            // Check if device is reachable
-            $isReachable = $iotDeviceModel->checkDeviceStatus($deviceIp, $devicePort);
-            $status = $isReachable ? 'online' : 'offline';
-
-            // Insert device
-            $deviceData = [
-                'device_name' => $deviceName,
-                'device_ip' => $deviceIp,
-                'device_port' => $devicePort,
-                'stream_path' => $streamPath,
-                'status' => $status,
-                'location' => $location,
-                'last_seen' => date('Y-m-d H:i:s')
-            ];
-
-            if ($iotDeviceModel->insert($deviceData)) {
-                return $this->response->setJSON([
-                    'success' => true,
-                    'message' => 'Device added successfully',
-                    'status' => $status,
-                    'device' => $iotDeviceModel->getDeviceByIp($deviceIp)
-                ]);
-            } else {
-                return $this->response->setJSON([
-                    'success' => false,
-                    'message' => 'Failed to add device: ' . json_encode($iotDeviceModel->errors())
-                ]);
-            }
-
+            return $this->response->setJSON(['success' => true, 'message' => 'Device added successfully']);
         } catch (\Exception $e) {
             log_message('error', 'Add device error: ' . $e->getMessage());
-            return $this->response->setJSON([
-                'success' => false, 
-                'message' => 'Server error: ' . $e->getMessage()
-            ]);
+            return $this->response->setJSON(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
         }
     }
 
     /**
-     * Remove IoT device
+     * Hapus perangkat
      */
-    public function removeDevice()
+    public function deleteDevice($id)
     {
         if (!session()->get('isLoggedIn')) {
             return $this->response->setJSON(['success' => false, 'message' => 'Not logged in']);
         }
 
-        if (strtolower($this->request->getMethod()) !== 'post') {
-            return $this->response->setJSON(['success' => false, 'message' => 'Invalid method']);
-        }
-
-        $json = $this->request->getJSON(true) ?: $this->request->getPost();
-        $deviceId = $json['device_id'] ?? '';
-
-        if (empty($deviceId)) {
-            return $this->response->setJSON(['success' => false, 'message' => 'Device ID is required']);
-        }
-
         try {
             $iotDeviceModel = new \App\Models\IotDeviceModel();
-            $device = $iotDeviceModel->find($deviceId);
-
-            if (!$device) {
-                return $this->response->setJSON(['success' => false, 'message' => 'Device not found']);
-            }
-
-            if ($iotDeviceModel->removeDevice($deviceId)) {
-                return $this->response->setJSON([
-                    'success' => true,
-                    'message' => 'Device removed successfully'
-                ]);
-            } else {
-                return $this->response->setJSON(['success' => false, 'message' => 'Failed to remove device']);
-            }
-
+            $iotDeviceModel->delete($id);
+            return $this->response->setJSON(['success' => true, 'message' => 'Device deleted']);
         } catch (\Exception $e) {
-            log_message('error', 'Remove device error: ' . $e->getMessage());
             return $this->response->setJSON(['success' => false, 'message' => 'Server error']);
         }
     }
 
     /**
-     * Check device status
+     * Cek status koneksi satu perangkat
      */
     public function checkDeviceStatus()
     {
@@ -269,18 +112,8 @@ class Integration extends BaseController
             return $this->response->setJSON(['success' => false, 'message' => 'Not logged in']);
         }
 
-        if (strtolower($this->request->getMethod()) !== 'post') {
-            return $this->response->setJSON(['success' => false, 'message' => 'Invalid method']);
-        }
-
-        $json = $this->request->getJSON(true) ?: $this->request->getPost();
-        $deviceId = $json['device_id'] ?? '';
-
-        if (empty($deviceId)) {
-            return $this->response->setJSON(['success' => false, 'message' => 'Device ID is required']);
-        }
-
         try {
+            $deviceId = $this->request->getVar('device_id');
             $iotDeviceModel = new \App\Models\IotDeviceModel();
             $device = $iotDeviceModel->find($deviceId);
 
@@ -288,63 +121,43 @@ class Integration extends BaseController
                 return $this->response->setJSON(['success' => false, 'message' => 'Device not found']);
             }
 
-            // Check if device is reachable
-            $isOnline = $iotDeviceModel->checkDeviceStatus($device['device_ip'], $device['device_port']);
-            $status = $isOnline ? 'online' : 'offline';
+            // Gunakan CURL agar bisa mendukung Proxy V2Ray jika ada
+            $ch = curl_init();
+            $targetUrl = "http://{$device['device_ip']}:{$device['device_port']}";
+            curl_setopt($ch, CURLOPT_URL, $targetUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+            curl_setopt($ch, CURLOPT_NOBODY, true); // Hanya cek header (cepat)
 
-            // Update device status
-            $iotDeviceModel->updateDeviceStatus($deviceId, $status);
+            $proxyServer = env('IOT_PROXY_SERVER');
+            $proxyPort = env('IOT_PROXY_PORT');
+            if (!empty($proxyServer) && !empty($proxyPort)) {
+                curl_setopt($ch, CURLOPT_PROXY, $proxyServer);
+                curl_setopt($ch, CURLOPT_PROXYPORT, $proxyPort);
+                curl_setopt($ch, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
+            }
+
+            curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $isOnline = ($httpCode > 0); // Jika ada respon, dianggap online
+            curl_close($ch);
+
+            $newStatus = $isOnline ? 'online' : 'offline';
+            $iotDeviceModel->updateDeviceStatus($deviceId, $newStatus);
 
             return $this->response->setJSON([
                 'success' => true,
-                'status' => $status,
-                'device' => $iotDeviceModel->find($deviceId)
+                'status' => $newStatus,
+                'last_seen' => date('Y-m-d H:i:s')
             ]);
 
         } catch (\Exception $e) {
-            log_message('error', 'Check device status error: ' . $e->getMessage());
-            return $this->response->setJSON(['success' => false, 'message' => 'Server error']);
+            return $this->response->setJSON(['success' => false, 'message' => $e->getMessage()]);
         }
     }
 
     /**
-     * Get dashboard summary
-     */
-    public function getSummary()
-    {
-        if (!session()->get('isLoggedIn')) {
-            return $this->response->setJSON(['success' => false, 'message' => 'Not logged in']);
-        }
-
-        try {
-            $iotDeviceModel = new \App\Models\IotDeviceModel();
-            $iotAttendanceModel = new \App\Models\IotAttendanceModel();
-
-            $devices = $iotDeviceModel->getAllDevices();
-            $totalDevices = count($devices);
-            $onlineDevices = count(array_filter($devices, function($device) {
-                return $device['status'] === 'online';
-            }));
-
-            $todayAttendance = $iotAttendanceModel->where('DATE(scan_time)', date('Y-m-d'))->countAllResults();
-
-            return $this->response->setJSON([
-                'success' => true,
-                'data' => [
-                    'total_devices' => $totalDevices,
-                    'online_devices' => $onlineDevices,
-                    'today_attendance' => $todayAttendance
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            log_message('error', 'Get summary error: ' . $e->getMessage());
-            return $this->response->setJSON(['success' => false, 'message' => 'Server error']);
-        }
-    }
-
-    /**
-     * Get recent activities
+     * Ambil log aktivitas terbaru
      */
     public function getRecentActivities()
     {
@@ -353,30 +166,10 @@ class Integration extends BaseController
         }
 
         try {
-            $iotAttendanceModel = new \App\Models\IotAttendanceModel();
             $iotDeviceModel = new \App\Models\IotDeviceModel();
-
-            // Get recent attendance activities
-            $recentAttendance = $iotAttendanceModel->select('iot_attendance.*, users.username, iot_devices.device_name')
-                ->join('users', 'users.id = iot_attendance.user_id')
-                ->join('iot_devices', 'iot_devices.id = iot_attendance.device_id', 'left')
-                ->orderBy('scan_time', 'DESC')
-                ->limit(10)
-                ->find();
-
             $activities = [];
 
-            foreach ($recentAttendance as $attendance) {
-                $activities[] = [
-                    'type' => 'attendance',
-                    'message' => "Absensi IoT: {$attendance['username']} - " . ucfirst($attendance['status']),
-                    'time' => $attendance['scan_time'],
-                    'device' => $attendance['device_name'] ?: 'Unknown Device',
-                    'color' => 'green'
-                ];
-            }
-
-            // Get recent device activities (connections, disconnections)
+            // Get last 5 updated devices
             $recentDevices = $iotDeviceModel->orderBy('updated_at', 'DESC')->limit(5)->find();
 
             foreach ($recentDevices as $device) {
@@ -485,36 +278,29 @@ class Integration extends BaseController
      */
     public function proxy()
     {
-        // PENTING: Lepaskan kunci session agar aplikasi tidak freeze/hang
-        // karena ini adalah request yang mungkin memakan waktu lama.
         if (session_get_cookie_params()) {
             session_write_close();
         }
 
         $targetUrl = $this->request->getVar('url');
-        
-        if (!$targetUrl) {
-            return "No URL provided";
-        }
-
-        // Pastikan targetUrl diawali http
-        if (strpos($targetUrl, 'http') !== 0) {
-            $targetUrl = 'http://' . $targetUrl;
-        }
+        if (!$targetUrl) return "No URL provided";
+        if (strpos($targetUrl, 'http') !== 0) $targetUrl = 'http://' . $targetUrl;
 
         try {
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $targetUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // Beri waktu 5 detik untuk jabat tangan
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
             curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-            curl_setopt($ch, CURLOPT_USERAGENT, 'Workflow-Proxy/1.0');
             
-            // Penting untuk Docker & Jaringan Lokal
-            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4); // Paksa IPv4
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            $proxyServer = env('IOT_PROXY_SERVER');
+            $proxyPort = env('IOT_PROXY_PORT');
+            if (!empty($proxyServer) && !empty($proxyPort)) {
+                curl_setopt($ch, CURLOPT_PROXY, $proxyServer);
+                curl_setopt($ch, CURLOPT_PROXYPORT, $proxyPort);
+                curl_setopt($ch, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
+            }
 
             $response = curl_exec($ch);
             $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
@@ -522,39 +308,18 @@ class Integration extends BaseController
             
             if (curl_errno($ch)) {
                 $error_msg = curl_error($ch);
-                $error_no = curl_errno($ch);
                 curl_close($ch);
-                return "Proxy Connection Error (#$error_no): " . $error_msg . " (Target: $targetUrl). Pastikan Docker container memiliki akses ke jaringan lokal.";
+                return "Proxy Error: " . $error_msg;
             }
 
             curl_close($ch);
 
-            // Jika konten adalah HTML, kita perlu menyuntikkan <base> tag dan me-rewrite URL stream & API
             if (strpos($contentType, 'text/html') !== false) {
                 $baseUrl = rtrim($targetUrl, '/') . '/';
                 $response = str_replace('<head>', "<head>\n    <base href=\"$baseUrl\">", $response);
-                
-                // Jalur Proxy resmi kita
-                $proxyStreamUrl = base_url('/integration/stream?url=');
-                $proxyApiUrl = base_url('/api-android/integration/push');
-
-                // 1. Rewrite URL Stream di Javascript (Lebih fleksibel terhadap spasi/kutip)
-                // Pola: const/var/let streamUrl = "..."
-                $newStreamValue = $proxyStreamUrl . urlencode($baseUrl . '?action=stream');
-                $response = preg_replace('/(const|var|let)\s+streamUrl\s*=\s*["\'][^"\']+["\']\s*;?/i', '$1 streamUrl = "' . $newStreamValue . '";', $response);
-                
-                // 2. Rewrite URL API di Javascript
-                // Pola: const/var/let apiUrl = "..."
-                $response = preg_replace('/(const|var|let)\s+apiUrl\s*=\s*["\'][^"\']+["\']\s*;?/i', '$1 apiUrl = "' . $proxyApiUrl . '";', $response);
-
-                // 3. Fallback: Ganti tag img manual
-                $response = str_replace('src="/?action=stream"', 'src="' . $newStreamValue . '"', $response);
             }
 
-            return $this->response
-                ->setStatusCode($httpCode)
-                ->setContentType($contentType)
-                ->setBody($response);
+            return $this->response->setStatusCode($httpCode)->setContentType($contentType)->setBody($response);
 
         } catch (\Exception $e) {
             return "Proxy Exception: " . $e->getMessage();
@@ -563,7 +328,6 @@ class Integration extends BaseController
 
     /**
      * Proxy khusus untuk Real-time Video Streaming (MJPEG)
-     * Mengalirkan data langsung dari OpenWrt ke Browser tanpa menunggu buffer selesai.
      */
     public function stream()
     {
@@ -575,13 +339,8 @@ class Integration extends BaseController
         if (!$targetUrl) return "No URL provided";
         if (strpos($targetUrl, 'http') !== 0) $targetUrl = 'http://' . $targetUrl;
 
-        // 1. Matikan limit waktu
         set_time_limit(0);
-        
-        // Matikan semua output buffering agar data tidak ditahan PHP
-        while (ob_get_level()) {
-            ob_end_clean();
-        }
+        while (ob_get_level()) ob_end_clean();
 
         header('Content-Type: multipart/x-mixed-replace; boundary=frame');
         header('Cache-Control: no-cache');
@@ -592,20 +351,24 @@ class Integration extends BaseController
         curl_setopt($ch, CURLOPT_URL, $targetUrl);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1024); // Buffer kecil agar cepat terkirim
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1024);
         
-        // Teruskan Content-Type asli dari Kamera jika ada
+        $proxyServer = env('IOT_PROXY_SERVER');
+        $proxyPort = env('IOT_PROXY_PORT');
+        if (!empty($proxyServer) && !empty($proxyPort)) {
+            curl_setopt($ch, CURLOPT_PROXY, $proxyServer);
+            curl_setopt($ch, CURLOPT_PROXYPORT, $proxyPort);
+            curl_setopt($ch, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
+        }
+
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $header) {
-            if (stripos($header, 'Content-Type') !== false) {
-                header($header);
-            }
+            if (stripos($header, 'Content-Type') !== false) header($header);
             return strlen($header);
         });
 
-        // Callback untuk menulis data secara real-time
         curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
             echo $data;
-            flush(); // Paksa kirim ke browser detik itu juga
+            flush();
             if (connection_aborted()) return 0;
             return strlen($data);
         });
