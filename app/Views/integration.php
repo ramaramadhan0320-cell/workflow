@@ -484,16 +484,22 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, m
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    // Gunakan Proxy untuk bypass blokir browser (PNA/Mixed Content)
-    const protocol = (devicePort == 443) ? 'https' : 'http';
-    const cleanIp = deviceIp.replace('http://', '').replace('https://', '');
-    const baseUrl = `${protocol}://${cleanIp}:${devicePort}`;
-    const rawUrl = pageUrl || baseUrl;
+    // Pastikan variabel tidak undefined
+    const safeIp = deviceIp || '';
+    const safePort = devicePort || 80;
+    const safePath = streamPath || '';
+    const safePageUrl = pageUrl || '';
+
+    // Bersihkan IP dari protokol
+    const cleanIp = safeIp.replace('http://', '').replace('https://', '');
+    const protocol = (safePort == 443) ? 'https' : 'http';
+    const baseUrl = `${protocol}://${cleanIp}:${safePort}`;
+    const rawUrl = safePageUrl || baseUrl;
     
-    // SELALU gunakan Proxy Halaman Web Standar (Tampilan Biasa)
+    // Bangun URL Proxy
     const finalUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
 
-    statusLabel.textContent = `Menghubungkan via Proxy ke ${cleanIp}...`;
+    statusLabel.textContent = `Menghubungkan via Bridge ke ${cleanIp}...`;
     statusLabel.className = "text-blue-400 animate-pulse";
     frame.src = finalUrl;
     openDeviceModal();
