@@ -557,35 +557,29 @@ class Integration extends BaseController
         if (!$targetUrl) return "No URL provided";
         if (strpos($targetUrl, 'http') !== 0) $targetUrl = 'http://' . $targetUrl;
 
+        // 1. Matikan limit waktu
         set_time_limit(0);
         
+        // 2. Header anti-buffer paling agresif
         header('X-Accel-Buffering: no'); 
         header('Content-Type: multipart/x-mixed-replace; boundary=boundarydonotcross');
         header('Cache-Control: no-cache, no-store, must-revalidate');
-        header('Connection: close');
+        header('Connection: keep-alive');
         header('Pragma: no-cache');
 
         if (ob_get_level()) ob_end_clean();
 
-        // Gunakan CURL Callback (Jauh lebih stabil untuk streaming MJPEG)
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $targetUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_BUFFERSIZE, 8192);
-        curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 0); // No timeout for stream
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        // 3. Gunakan perintah sistem curl langsung (RAW)
+        // Ini mem-bypass banyak keterbatasan internal PHP
+        $cmd = "curl -s -L --connect-timeout 10 \"" . $targetUrl . "\"";
+        $handle = popen($cmd, 'r');
         
-        // Fungsi untuk meneruskan data secara langsung saat diterima
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
-            echo $data;
+        while (!feof($handle) && connection_status() == 0) {
+            echo fread($handle, 8192);
             flush();
-            return strlen($data);
-        });
-
-        curl_exec($ch);
-        curl_close($ch);
+        }
+        
+        pclose($handle);
         exit;
     }
 }
