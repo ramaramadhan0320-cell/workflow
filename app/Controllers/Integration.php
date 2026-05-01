@@ -492,14 +492,21 @@ class Integration extends BaseController
 
             curl_close($ch);
 
-            // Jika konten adalah HTML, kita perlu menyuntikkan <base> tag dan me-rewrite URL stream
+            // Jika konten adalah HTML, kita perlu menyuntikkan <base> tag dan me-rewrite URL stream & API
             if (strpos($contentType, 'text/html') !== false) {
                 $baseUrl = rtrim($targetUrl, '/') . '/';
                 $response = str_replace('<head>', "<head>\n    <base href=\"$baseUrl\">", $response);
                 
-                // Rewrite otomatis jika ada tag img yang mengarah ke stream agar lewat proxy stream kita
-                // Mencari pola src="/?action=stream" atau sejenisnya
+                // 1. Rewrite URL Stream di Javascript (Mencari const streamUrl = "...")
                 $streamProxyPath = base_url('/integration/stream?url=') . $baseUrl;
+                $response = preg_replace('/const streamUrl = "[^"]+";/', 'const streamUrl = "' . $streamProxyPath . '?action=stream";', $response);
+                
+                // 2. Rewrite URL API di Javascript (Mencari const apiUrl = "...")
+                // Kita arahkan ke endpoint push resmi aplikasi Workflow
+                $workflowApiUrl = base_url('/api-android/integration/push');
+                $response = preg_replace('/const apiUrl = "[^"]+";/', 'const apiUrl = "' . $workflowApiUrl . '";', $response);
+
+                // 3. Fallback: Ganti src gambar manual jika regex javascript gagal
                 $response = str_replace('src="/?action=stream"', 'src="' . $streamProxyPath . '?action=stream"', $response);
             }
 
