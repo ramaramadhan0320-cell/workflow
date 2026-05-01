@@ -464,18 +464,17 @@ class Integration extends BaseController
         $devicePort = $this->request->getVar('port');
         $path = $this->request->getVar('path');
         
-        if (!empty($path)) {
-            // Gunakan path kustom jika disediakan
-            if ($path[0] !== '/') $path = '/' . $path;
-            $targetUrl = "http://{$deviceIp}:{$devicePort}{$path}";
-        } else {
-            // Logika cerdas fallback
+        // Logika Pintar: Jika path kosong, berikan default berdasarkan port
+        if (empty($path) || $path === '/stream') {
             if ($devicePort == '1984') {
-                $targetUrl = "http://{$deviceIp}:{$devicePort}/api/stream.mjpeg?src=kamera_absensi";
+                $path = '/api/stream.mjpeg?src=kamera_absensi';
             } else {
-                $targetUrl = "http://{$deviceIp}:{$devicePort}/?action=stream";
+                $path = '/?action=stream';
             }
         }
+
+        if ($path[0] !== '/') $path = '/' . $path;
+        $targetUrl = "http://{$deviceIp}:{$devicePort}{$path}";
 
         $streamUrl = base_url('/integration/stream?url=') . urlencode($targetUrl);
 
