@@ -250,6 +250,63 @@ class Integration extends ResourceController
         }
     }
 
+    /**
+     * Proxy untuk mengambil tampilan web IoT agar tidak diblokir browser (Mixed Content/PNA)
+     * URL: /integration/proxy?url=http://192.168.1.1
+     */
+    public function proxy()
+    {
+        $targetUrl = $this->request->getVar('url');
+        
+        if (!$targetUrl) {
+            return "No URL provided";
+        }
+
+        // Pastikan targetUrl diawali http
+        if (strpos($targetUrl, 'http') !== 0) {
+            $targetUrl = 'http://' . $targetUrl;
+        }
+
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $targetUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Workflow-Proxy/1.0');
+            
+            // Bypass SSL check jika ada
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
+            $response = curl_exec($ch);
+            $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            if (curl_errno($ch)) {
+                $error_msg = curl_error($ch);
+                curl_close($ch);
+                return "Proxy Error: " . $error_msg;
+            }
+
+            curl_close($ch);
+
+            // Jika konten adalah HTML, kita perlu menyuntikkan <base> tag agar link internal tidak rusak
+            if (strpos($contentType, 'text/html') !== false) {
+                $baseUrl = rtrim($targetUrl, '/') . '/';
+                $response = str_replace('<head>', "<head>\n    <base href=\"$baseUrl\">", $response);
+            }
+
+            return $this->response
+                ->setStatusCode($httpCode)
+                ->setContentType($contentType)
+                ->setBody($response);
+
+        } catch (\Exception $e) {
+            return "Proxy Exception: " . $e->getMessage();
+        }
+    }
+
     private function pingDevice($ip, $port)
     {
         $timeout = 2;

@@ -480,10 +480,11 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl) {
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    currentDeviceUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
+    const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
+    currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
     
     // Show modal with loading state
-    statusLabel.textContent = `Sedang memindai ${deviceIp}:${devicePort}...`;
+    statusLabel.textContent = `Sedang memindai ${deviceIp}:${devicePort} (via Proxy)...`;
     statusLabel.className = "text-blue-400 animate-pulse";
     frame.src = 'about:blank';
     openDeviceModal();
