@@ -591,17 +591,25 @@ class Integration extends BaseController
 
         if (ob_get_level()) ob_end_clean();
 
-        // 3. Gunakan perintah sistem curl langsung (RAW)
-        // Ini mem-bypass banyak keterbatasan internal PHP
-        $cmd = "curl -s -L --connect-timeout 10 \"" . $targetUrl . "\"";
-        $handle = popen($cmd, 'r');
-        
-        while (!feof($handle) && connection_status() == 0) {
-            echo fread($handle, 8192);
+        // Gunakan CURL Callback (Paling stabil untuk go2rtc & MJPEG)
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $targetUrl);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
+            echo $data;
             flush();
-        }
+            return strlen($data);
+        });
         
-        pclose($handle);
+        // Timeout & Buffering
+        curl_setopt($ch, CURLOPT_TIMEOUT, 0); 
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1024 * 4); // 4KB buffer
+        curl_setopt($ch, CURLOPT_TCP_KEEPALIVE, 1);
+
+        curl_exec($ch);
+        curl_close($ch);
         exit;
     }
 }

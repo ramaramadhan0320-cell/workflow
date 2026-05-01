@@ -642,13 +642,13 @@ function displayDevices(devices) {
                     <span class="text-white/40 text-[9px]">${device.last_seen ? new Date(device.last_seen).toLocaleDateString('id-ID') : 'Never'}</span>
                 </div>
                 <div class="flex gap-2 justify-end sm:justify-end">
-                    <!-- Tombol Monitor (Bisa Auto-Detect) -->
-                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || '/stream'}', '${device.page_url}', ${(device.device_port == 1984 || device.device_port == 1884) ? "'scanner'" : "'proxy'"})" class="bg-blue-500/60 hover:bg-blue-600 p-2 rounded-lg transition-all text-xs" title="Lihat Monitor">
+                    <!-- Tombol Monitor (Selalu Proxy / Halaman Asli) -->
+                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || ''}', '${device.page_url}', 'proxy')" class="bg-blue-500/60 hover:bg-blue-600 p-2 rounded-lg transition-all text-xs" title="Buka Halaman Asli (Proxy)">
                         <i data-lucide="monitor" class="w-3 h-3"></i>
                     </button>
                     
-                    <!-- Tombol Khusus Scanner (Force Scanner Mode) -->
-                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || '/stream'}', '${device.page_url}', 'scanner')" class="bg-purple-500/60 hover:bg-purple-600 p-2 rounded-lg transition-all text-xs" title="Buka Mode Scanner">
+                    <!-- Tombol Scanner (Selalu Mode Scanner Workflow) -->
+                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || ''}', '${device.page_url}', 'scanner')" class="bg-purple-500/60 hover:bg-purple-600 p-2 rounded-lg transition-all text-xs" title="Buka Mode Scanner">
                         <i data-lucide="qr-code" class="w-3 h-3"></i>
                     </button>
                     <button onclick="checkDeviceStatus(${device.id})" class="bg-green-500/60 hover:bg-green-600 p-2 rounded-lg transition-all text-xs" title="Cek Status">
@@ -1035,7 +1035,7 @@ function copyQrString() {
                     </div>
                     <div>
                         <label class="block text-white/80 text-sm font-medium mb-2">Stream Path</label>
-                        <input type="text" id="streamPath" placeholder="Contoh: /stream" value="/stream" class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-blue-400">
+                        <input type="text" id="streamPath" placeholder="Contoh: /?action=stream" class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-blue-400">
                     </div>
                 </div>
                 <p class="text-white/40 text-[10px] mt-1">Path stream (misal: /?action=stream atau /api/stream.mjpeg?src=cam1)</p>
