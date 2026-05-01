@@ -484,7 +484,7 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, m
     const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
     
     if (mode === 'scanner') {
-        currentDeviceUrl = `/integration/scanner?ip=${deviceIp}&port=${devicePort}`;
+        currentDeviceUrl = `/integration/scanner?ip=${deviceIp}&port=${devicePort}&path=` + encodeURIComponent(streamPath);
     } else {
         currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
     }
@@ -675,6 +675,7 @@ async function addNewDeviceSubmit(event) {
     const deviceName = document.getElementById('deviceName').value.trim();
     const devicePortValue = document.getElementById('devicePort').value.trim();
     const devicePort = devicePortValue ? parseInt(devicePortValue, 10) : 80;
+    const streamPath = document.getElementById('streamPath').value.trim() || '/stream';
     
     if (!deviceIp) {
         alert('IP Address harus diisi');
@@ -703,7 +704,7 @@ async function addNewDeviceSubmit(event) {
                 device_ip: deviceIp,
                 device_name: deviceName,
                 device_port: devicePort,
-                stream_path: '/stream',
+                stream_path: streamPath,
                 location: 'Unknown'
             })
         });
@@ -1021,11 +1022,17 @@ function copyQrString() {
                 </div>
 
                 <!-- Device Port -->
-                <div>
-                    <label class="block text-white/80 text-sm font-medium mb-2">Port *</label>
-                    <input type="number" id="devicePort" placeholder="Contoh: 80" value="80" min="1" max="65535" class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-blue-400" required>
-                    <p class="text-white/40 text-xs mt-1">Sesuaikan port IoT device Anda, misalnya 80, 8080, atau 443.</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-white/80 text-sm font-medium mb-2">Port *</label>
+                        <input type="number" id="devicePort" placeholder="Contoh: 80" value="80" min="1" max="65535" class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-blue-400" required>
+                    </div>
+                    <div>
+                        <label class="block text-white/80 text-sm font-medium mb-2">Stream Path</label>
+                        <input type="text" id="streamPath" placeholder="Contoh: /stream" value="/stream" class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-blue-400">
+                    </div>
                 </div>
+                <p class="text-white/40 text-[10px] mt-1">Path stream (misal: /?action=stream atau /api/stream.mjpeg?src=cam1)</p>
 
                 <!-- Buttons -->
                 <div class="flex gap-3 pt-4">

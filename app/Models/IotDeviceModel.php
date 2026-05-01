@@ -57,6 +57,7 @@ class IotDeviceModel extends Model
             'device_name' => $data['device_name'] ?? 'IoT Device',
             'device_ip' => $data['device_ip'],
             'device_port' => $data['device_port'] ?? 80,
+            'stream_path' => $data['stream_path'] ?? '',
             'status' => 'offline',
             'location' => $data['location'] ?? 'Unknown',
         ];
