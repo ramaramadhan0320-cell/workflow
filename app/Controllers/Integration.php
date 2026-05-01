@@ -591,21 +591,27 @@ class Integration extends BaseController
 
         if (ob_get_level()) ob_end_clean();
 
-        // Gunakan CURL Callback (Paling stabil untuk go2rtc & MJPEG)
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $targetUrl);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+        
+        // Proxy Header dari Kamera ke Browser
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $header) {
+            header($header);
+            return strlen($header);
+        });
+
         curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
             echo $data;
+            if (connection_aborted()) return 0;
             flush();
             return strlen($data);
         });
         
-        // Timeout & Buffering
         curl_setopt($ch, CURLOPT_TIMEOUT, 0); 
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1024 * 4); // 4KB buffer
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 8192);
         curl_setopt($ch, CURLOPT_TCP_KEEPALIVE, 1);
 
         curl_exec($ch);
