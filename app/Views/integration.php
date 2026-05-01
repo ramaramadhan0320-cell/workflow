@@ -490,17 +490,8 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, m
     const baseUrl = `${protocol}://${cleanIp}:${devicePort}`;
     const rawUrl = pageUrl || baseUrl;
     
-    // Tentukan URL tujuan akhir
-    let finalUrl = '';
-    if (mode === 'scanner' || (devicePort == 1984 || devicePort == 1884)) {
-        // Mode Scanner Premium
-        const path = streamPath || '/api/stream.mjpeg?src=kamera_absensi';
-        window.location.href = `/integration/scanner?ip=${cleanIp}&port=${devicePort}&path=${encodeURIComponent(path)}`;
-        return;
-    } else {
-        // Mode Proxy Halaman Web
-        finalUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
-    }
+    // SELALU gunakan Proxy Halaman Web Standar (Tampilan Biasa)
+    const finalUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
 
     statusLabel.textContent = `Menghubungkan via Proxy ke ${cleanIp}...`;
     statusLabel.className = "text-blue-400 animate-pulse";
