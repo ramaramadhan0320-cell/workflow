@@ -497,17 +497,21 @@ class Integration extends BaseController
                 $baseUrl = rtrim($targetUrl, '/') . '/';
                 $response = str_replace('<head>', "<head>\n    <base href=\"$baseUrl\">", $response);
                 
-                // 1. Rewrite URL Stream di Javascript (Mencari const streamUrl = "...")
-                $streamProxyPath = base_url('/integration/stream?url=') . $baseUrl;
-                $response = preg_replace('/const streamUrl = "[^"]+";/', 'const streamUrl = "' . $streamProxyPath . '?action=stream";', $response);
-                
-                // 2. Rewrite URL API di Javascript (Mencari const apiUrl = "...")
-                // Kita arahkan ke endpoint push resmi aplikasi Workflow
-                $workflowApiUrl = base_url('/api-android/integration/push');
-                $response = preg_replace('/const apiUrl = "[^"]+";/', 'const apiUrl = "' . $workflowApiUrl . '";', $response);
+                // Jalur Proxy resmi kita
+                $proxyStreamUrl = base_url('/integration/stream?url=');
+                $proxyApiUrl = base_url('/api-android/integration/push');
 
-                // 3. Fallback: Ganti src gambar manual jika regex javascript gagal
-                $response = str_replace('src="/?action=stream"', 'src="' . $streamProxyPath . '?action=stream"', $response);
+                // 1. Rewrite URL Stream di Javascript (Lebih fleksibel terhadap spasi/kutip)
+                // Pola: const/var/let streamUrl = "..."
+                $newStreamValue = $proxyStreamUrl . urlencode($baseUrl . '?action=stream');
+                $response = preg_replace('/(const|var|let)\s+streamUrl\s*=\s*["\'][^"\']+["\']\s*;?/i', '$1 streamUrl = "' . $newStreamValue . '";', $response);
+                
+                // 2. Rewrite URL API di Javascript
+                // Pola: const/var/let apiUrl = "..."
+                $response = preg_replace('/(const|var|let)\s+apiUrl\s*=\s*["\'][^"\']+["\']\s*;?/i', '$1 apiUrl = "' . $proxyApiUrl . '";', $response);
+
+                // 3. Fallback: Ganti tag img manual
+                $response = str_replace('src="/?action=stream"', 'src="' . $newStreamValue . '"', $response);
             }
 
             return $this->response
