@@ -642,8 +642,14 @@ function displayDevices(devices) {
                     <span class="text-white/40 text-[9px]">${device.last_seen ? new Date(device.last_seen).toLocaleDateString('id-ID') : 'Never'}</span>
                 </div>
                 <div class="flex gap-2 justify-end sm:justify-end">
-                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || '/stream'}', '${device.page_url}', ${device.device_port == 1984 ? "'scanner'" : "'proxy'"})" class="bg-blue-500/60 hover:bg-blue-600 p-2 rounded-lg transition-all text-xs" title="Lihat Halaman">
+                    <!-- Tombol Monitor (Bisa Auto-Detect) -->
+                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || '/stream'}', '${device.page_url}', ${(device.device_port == 1984 || device.device_port == 1884) ? "'scanner'" : "'proxy'"})" class="bg-blue-500/60 hover:bg-blue-600 p-2 rounded-lg transition-all text-xs" title="Lihat Monitor">
                         <i data-lucide="monitor" class="w-3 h-3"></i>
+                    </button>
+                    
+                    <!-- Tombol Khusus Scanner (Force Scanner Mode) -->
+                    <button onclick="viewStream('${device.id}', '${device.device_ip}', ${device.device_port}, '${device.stream_path || '/stream'}', '${device.page_url}', 'scanner')" class="bg-purple-500/60 hover:bg-purple-600 p-2 rounded-lg transition-all text-xs" title="Buka Mode Scanner">
+                        <i data-lucide="qr-code" class="w-3 h-3"></i>
                     </button>
                     <button onclick="checkDeviceStatus(${device.id})" class="bg-green-500/60 hover:bg-green-600 p-2 rounded-lg transition-all text-xs" title="Cek Status">
                         <i data-lucide="activity" class="w-3 h-3"></i>
