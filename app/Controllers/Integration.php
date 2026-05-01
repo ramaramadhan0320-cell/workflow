@@ -463,21 +463,23 @@ class Integration extends BaseController
         $deviceIp = $this->request->getVar('ip');
         $devicePort = $this->request->getVar('port');
         $path = $this->request->getVar('path');
+        $direct = $this->request->getVar('direct');
         
-        // FORCED LOGIC: Jika ini go2rtc (1984/1884), kita HARUS pakai MJPEG API
-        // Karena mode scanner menggunakan tag <img> yang tidak bisa memuat halaman .html
-        if ($devicePort == '1984' || $devicePort == '1884') {
-            $path = '/api/stream.mjpeg?src=kamera_absensi';
-        } 
-        // Fallback untuk kamera lain
-        elseif (empty($path) || $path === '/stream' || strpos($path, '.html') !== false) {
-            $path = '/?action=stream';
+        if ($direct === 'true') {
+            // Mode Langsung: Browser langsung tembak ke IP Kamera
+            $protocol = ($devicePort == 443) ? 'https' : 'http';
+            $streamUrl = "{$protocol}://{$deviceIp}:{$devicePort}{$path}";
+        } else {
+            // Mode Proxy (Jika masih dibutuhkan)
+            $targetUrl = "http://{$deviceIp}:{$devicePort}{$path}";
+            $streamUrl = base_url('/integration/stream?url=') . urlencode($targetUrl);
         }
 
-        if ($path[0] !== '/') $path = '/' . $path;
-        $targetUrl = "http://{$deviceIp}:{$devicePort}{$path}";
-
-        $streamUrl = base_url('/integration/stream?url=') . urlencode($targetUrl);
+        return view('iot_scanner', [
+            'streamUrl' => $streamUrl,
+            'deviceName' => 'Scanner Mode'
+        ]);
+    }
 
         return view('iot_scanner', [
             'streamUrl' => $streamUrl

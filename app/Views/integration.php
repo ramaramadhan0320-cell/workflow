@@ -484,61 +484,24 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, m
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    // Logic: Jika port 443, ini adalah Interface Scanner berbasis Domain
-    // Kita gunakan koneksi LANGSUNG (Direct) tanpa proxy agar cepat dan stabil.
-    if (devicePort == 443 || mode === 'scanner') {
-        const protocol = devicePort == 443 ? 'https' : 'http';
-        const cleanIp = deviceIp.replace('http://', '').replace('https://', '');
-        
-        // Untuk scanner, kita gunakan jalur video murni go2rtc
-        const finalUrl = `${protocol}://${cleanIp}/api/stream.mjpeg?src=kamera_absensi`;
-        
-        if (mode === 'scanner' || devicePort == 443) {
-            // Jika ini mode scanner, kita tidak pakai iframe, tapi langsung buka di modal scanner premium
-            window.location.href = `/integration/scanner?ip=${cleanIp}&port=${devicePort}&path=/api/stream.mjpeg?src=kamera_absensi`;
-            return;
-        }
+    // KONEKSI LANGSUNG (TANPA PROXY)
+    const cleanIp = deviceIp.replace('http://', '').replace('https://', '');
+    const protocol = (devicePort == 443) ? 'https' : 'http';
+    const baseUrl = `${protocol}://${cleanIp}:${devicePort}`;
+    
+    if (mode === 'scanner') {
+        // Buka halaman scanner dengan link langsung
+        window.location.href = `/integration/scanner?ip=${cleanIp}&port=${devicePort}&path=${encodeURIComponent(streamPath)}&direct=true`;
+        return;
     }
-    
-    // Standard Proxy Logic untuk IoT Biasa
-    const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
-    currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
-    
-    const normalizedPath = streamPath.startsWith('/') ? streamPath : '/' + streamPath;
-    const rawStreamUrl = `http://${deviceIp}:${devicePort}${normalizedPath}`;
-    currentDeviceStreamUrl = `/integration/stream?url=` + encodeURIComponent(rawStreamUrl);
-    
-    // Show modal with loading state
-    statusLabel.textContent = `Sedang memindai ${deviceIp}:${devicePort} (via Proxy)...`;
-    statusLabel.className = "text-blue-400 animate-pulse";
-    frame.src = 'about:blank';
-    openDeviceModal();
 
-    // Pre-check connectivity via server
-    try {
-        const response = await fetch('/integration/check-device-status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ device_id: deviceId })
-        });
-        const result = await response.json();
-        
-        if (result.success && result.status === 'online') {
-            statusLabel.textContent = 'Terhubung! Memuat antarmuka...';
-            statusLabel.className = "text-green-400";
-            setTimeout(() => {
-                frame.src = currentDeviceUrl;
-            }, 500);
-        } else {
-            statusLabel.textContent = 'Perangkat tidak merespon (Offline)';
-            statusLabel.className = "text-red-400";
-            if(confirm('Perangkat tampaknya offline. Tetap mencoba buka?')) {
-                frame.src = currentDeviceUrl;
-            }
-        }
-    } catch (error) {
-        frame.src = currentDeviceUrl;
-    }
+    const finalUrl = pageUrl || baseUrl;
+    
+    // Tampilkan modal dan langsung muat URL asli
+    statusLabel.textContent = `Menghubungkan langsung ke ${cleanIp}...`;
+    statusLabel.className = "text-green-400";
+    frame.src = finalUrl;
+    openDeviceModal();
 }
 
 function openDevicePage() {
