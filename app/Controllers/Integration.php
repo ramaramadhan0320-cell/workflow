@@ -16,8 +16,12 @@ class Integration extends BaseController
             return redirect()->to('/login');
         }
 
+        $userModel = new \App\Models\UserModel();
+        $user = $userModel->find(session()->get('userId'));
+
         return view('integration', [
-            'title' => 'Integrasi IoT'
+            'title' => 'Integrasi IoT',
+            'user'  => $user
         ]);
     }
 
