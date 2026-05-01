@@ -452,9 +452,18 @@ class Integration extends BaseController
     {
         $deviceIp = $this->request->getVar('ip');
         $devicePort = $this->request->getVar('port');
+        $src = $this->request->getVar('src') ?: 'kamera_absensi'; // Default src untuk go2rtc
         
-        $baseUrl = "http://{$deviceIp}:{$devicePort}/";
-        $streamUrl = base_url('/integration/stream?url=') . urlencode($baseUrl . '?action=stream');
+        // Cek apakah ini go2rtc (biasanya port 1984) atau kamera langsung (2005)
+        if ($devicePort == '1984') {
+            // Jalur MJPEG API milik go2rtc
+            $targetUrl = "http://{$deviceIp}:{$devicePort}/api/stream.mjpeg?src={$src}";
+        } else {
+            // Jalur kamera langsung
+            $targetUrl = "http://{$deviceIp}:{$devicePort}/?action=stream";
+        }
+
+        $streamUrl = base_url('/integration/stream?url=') . urlencode($targetUrl);
 
         return view('iot_scanner', [
             'streamUrl' => $streamUrl
