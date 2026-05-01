@@ -163,6 +163,13 @@ class Integration extends BaseController
         try {
             $iotDeviceModel = new \App\Models\IotDeviceModel();
 
+            // Auto-fix jika user memasukkan port di kolom IP (misal 192.168.1.1:1984)
+            if (strpos($deviceIp, ':') !== false) {
+                $parts = explode(':', $deviceIp);
+                $deviceIp = $parts[0];
+                $devicePort = intval($parts[1]);
+            }
+
             // Check if device already exists on same IP and port
             $existing = $iotDeviceModel->getDeviceByIpPort($deviceIp, $devicePort);
             if ($existing) {
@@ -197,13 +204,16 @@ class Integration extends BaseController
             } else {
                 return $this->response->setJSON([
                     'success' => false,
-                    'message' => 'Failed to add device'
+                    'message' => 'Failed to add device: ' . json_encode($iotDeviceModel->errors())
                 ]);
             }
 
         } catch (\Exception $e) {
             log_message('error', 'Add device error: ' . $e->getMessage());
-            return $this->response->setJSON(['success' => false, 'message' => 'Server error']);
+            return $this->response->setJSON([
+                'success' => false, 
+                'message' => 'Server error: ' . $e->getMessage()
+            ]);
         }
     }
 
