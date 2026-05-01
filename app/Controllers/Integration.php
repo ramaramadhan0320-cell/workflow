@@ -470,10 +470,12 @@ class Integration extends BaseController
             curl_setopt($ch, CURLOPT_URL, $targetUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // Beri waktu 5 detik untuk jabat tangan
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
             curl_setopt($ch, CURLOPT_USERAGENT, 'Workflow-Proxy/1.0');
             
-            // Bypass SSL check jika ada
+            // Penting untuk Docker & Jaringan Lokal
+            curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4); // Paksa IPv4
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
@@ -483,8 +485,9 @@ class Integration extends BaseController
             
             if (curl_errno($ch)) {
                 $error_msg = curl_error($ch);
+                $error_no = curl_errno($ch);
                 curl_close($ch);
-                return "Proxy Error: " . $error_msg;
+                return "Proxy Connection Error (#$error_no): " . $error_msg . " (Target: $targetUrl). Pastikan Docker container memiliki akses ke jaringan lokal.";
             }
 
             curl_close($ch);
