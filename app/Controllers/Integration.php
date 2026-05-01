@@ -454,6 +454,12 @@ class Integration extends BaseController
      */
     public function proxy()
     {
+        // PENTING: Lepaskan kunci session agar aplikasi tidak freeze/hang
+        // karena ini adalah request yang mungkin memakan waktu lama.
+        if (session_get_cookie_params()) {
+            session_write_close();
+        }
+
         $targetUrl = $this->request->getVar('url');
         
         if (!$targetUrl) {
@@ -530,6 +536,12 @@ class Integration extends BaseController
      */
     public function stream()
     {
+        // PENTING: Lepaskan kunci session agar aplikasi tidak freeze/hang
+        // karena stream MJPEG berjalan selamanya.
+        if (session_get_cookie_params()) {
+            session_write_close();
+        }
+
         $targetUrl = $this->request->getVar('url');
         if (!$targetUrl) return "No URL provided";
 
