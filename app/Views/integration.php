@@ -484,22 +484,26 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, m
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    // KONEKSI LANGSUNG (TANPA PROXY)
-    const cleanIp = deviceIp.replace('http://', '').replace('https://', '');
+    // Gunakan Proxy untuk bypass blokir browser (PNA/Mixed Content)
     const protocol = (devicePort == 443) ? 'https' : 'http';
+    const cleanIp = deviceIp.replace('http://', '').replace('https://', '');
     const baseUrl = `${protocol}://${cleanIp}:${devicePort}`;
+    const rawUrl = pageUrl || baseUrl;
     
-    if (mode === 'scanner') {
-        // Buka halaman scanner dengan link langsung
-        window.location.href = `/integration/scanner?ip=${cleanIp}&port=${devicePort}&path=${encodeURIComponent(streamPath)}&direct=true`;
+    // Tentukan URL tujuan akhir
+    let finalUrl = '';
+    if (mode === 'scanner' || (devicePort == 1984 || devicePort == 1884)) {
+        // Mode Scanner Premium
+        const path = streamPath || '/api/stream.mjpeg?src=kamera_absensi';
+        window.location.href = `/integration/scanner?ip=${cleanIp}&port=${devicePort}&path=${encodeURIComponent(path)}`;
         return;
+    } else {
+        // Mode Proxy Halaman Web
+        finalUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
     }
 
-    const finalUrl = pageUrl || baseUrl;
-    
-    // Tampilkan modal dan langsung muat URL asli
-    statusLabel.textContent = `Menghubungkan langsung ke ${cleanIp}...`;
-    statusLabel.className = "text-green-400";
+    statusLabel.textContent = `Menghubungkan via Proxy ke ${cleanIp}...`;
+    statusLabel.className = "text-blue-400 animate-pulse";
     frame.src = finalUrl;
     openDeviceModal();
 }

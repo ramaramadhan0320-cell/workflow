@@ -463,17 +463,15 @@ class Integration extends BaseController
         $deviceIp = $this->request->getVar('ip');
         $devicePort = $this->request->getVar('port');
         $path = $this->request->getVar('path');
-        $direct = $this->request->getVar('direct');
         
-        if ($direct === 'true') {
-            // Mode Langsung: Browser langsung tembak ke IP Kamera
-            $protocol = ($devicePort == 443) ? 'https' : 'http';
-            $streamUrl = "{$protocol}://{$deviceIp}:{$devicePort}{$path}";
-        } else {
-            // Mode Proxy (Jika masih dibutuhkan)
-            $targetUrl = "http://{$deviceIp}:{$devicePort}{$path}";
-            $streamUrl = base_url('/integration/stream?url=') . urlencode($targetUrl);
+        // Cek fallback path jika kosong
+        if (empty($path)) {
+            $path = ($devicePort == 1984 || $devicePort == 1884) ? '/api/stream.mjpeg?src=kamera_absensi' : '/?action=stream';
         }
+
+        // Gunakan PROXY STREAM untuk video agar tidak diblokir browser
+        $targetUrl = "http://{$deviceIp}:{$devicePort}{$path}";
+        $streamUrl = base_url('/integration/stream?url=') . urlencode($targetUrl);
 
         return view('iot_scanner', [
             'streamUrl' => $streamUrl,
@@ -589,44 +587,30 @@ class Integration extends BaseController
 
         if (ob_get_level()) ob_end_clean();
 
-        $parsedUrl = parse_url($targetUrl);
-        $host = $parsedUrl['host'];
-        $port = $parsedUrl['port'] ?? 80;
-        $path = ($parsedUrl['path'] ?? '/') . (isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '');
+        // High Performance Streaming Proxy
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $targetUrl);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1024 * 8); // 8KB buffer
+        curl_setopt($ch, CURLOPT_TIMEOUT, 0); 
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+        
+        // Meneruskan Content-Type secara tepat (MJPEG)
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $header) {
+            header($header);
+            return strlen($header);
+        });
 
-        $fp = @fsockopen($host, $port, $errno, $errstr, 30);
-        if (!$fp) {
-            header("HTTP/1.1 500 Internal Server Error");
-            echo "Proxy Error: $errstr ($errno)";
-            return;
-        }
-
-        // Send request to source
-        fputs($fp, "GET $path HTTP/1.0\r\n");
-        fputs($fp, "Host: $host\r\n");
-        fputs($fp, "User-Agent: Mozilla/5.0\r\n");
-        fputs($fp, "Connection: close\r\n\r\n");
-
-        // Simple Header Proxy
-        $headerFinished = false;
-        while (!$headerFinished && !feof($fp)) {
-            $line = fgets($fp, 4096);
-            if (trim($line) == "") {
-                $headerFinished = true;
-            } else {
-                if (stripos($line, 'Content-Type') !== false) {
-                    header($line);
-                }
-            }
-        }
-
-        // Stream Body
-        while (!feof($fp) && connection_status() == 0) {
-            echo fread($fp, 8192);
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
+            echo $data;
+            if (connection_aborted()) return 0;
             flush();
-        }
+            return strlen($data);
+        });
 
-        fclose($fp);
+        curl_exec($ch);
+        curl_close($ch);
         exit;
     }
 }
