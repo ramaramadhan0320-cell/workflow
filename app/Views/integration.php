@@ -480,10 +480,10 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl) {
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
-    currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
+    // Gunakan Scanner Internal yang baru (Premium)
+    currentDeviceUrl = `/integration/scanner?ip=${deviceIp}&port=${devicePort}`;
     
-    // Simpan URL stream murni untuk keperluan lain
+    // Simpan URL stream untuk keperluan internal
     const normalizedPath = streamPath.startsWith('/') ? streamPath : '/' + streamPath;
     const rawStreamUrl = `http://${deviceIp}:${devicePort}${normalizedPath}`;
     currentDeviceStreamUrl = `/integration/stream?url=` + encodeURIComponent(rawStreamUrl);

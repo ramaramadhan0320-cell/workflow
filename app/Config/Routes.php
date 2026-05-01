@@ -99,6 +99,7 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->get('/integration/get-recent-activities', 'Integration::getRecentActivities');
     $routes->get('/integration/proxy', 'Integration::proxy');
     $routes->get('/integration/stream', 'Integration::stream');
+    $routes->get('/integration/scanner', 'Integration::scanner');
 
     // IoT API (Bypass CSRF untuk device IoT)
     $routes->group('api/iot', ['namespace' => 'App\Controllers'], function($routes) {

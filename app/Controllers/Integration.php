@@ -448,6 +448,19 @@ class Integration extends BaseController
         }
     }
 
+    public function scanner()
+    {
+        $deviceIp = $this->request->getVar('ip');
+        $devicePort = $this->request->getVar('port');
+        
+        $baseUrl = "http://{$deviceIp}:{$devicePort}/";
+        $streamUrl = base_url('/integration/stream?url=') . urlencode($baseUrl . '?action=stream');
+
+        return view('iot_scanner', [
+            'streamUrl' => $streamUrl
+        ]);
+    }
+
     /**
      * Proxy untuk mengambil tampilan web IoT agar tidak diblokir browser (Mixed Content/PNA)
      * URL: /integration/proxy?url=http://192.168.1.1
