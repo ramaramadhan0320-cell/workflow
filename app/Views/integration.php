@@ -414,6 +414,24 @@ document.addEventListener('click', function(e) {
     updateLocalDate();
     setInterval(updateLocalDate, 60000);
 
+    // Auto refresh device status on load
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(loadDevices, 500);
+        setTimeout(loadSummary, 1000);
+        setTimeout(refreshAllDeviceStatusSilent, 2000);
+    });
+
+    async function refreshAllDeviceStatusSilent() {
+        try {
+            await fetch('/integration/refresh-all-status', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            loadDevices();
+            loadSummary();
+        } catch (e) {}
+    }
+
     // Device Functions
     function addNewDevice() {
         alert('Fitur tambah device akan ditampilkan di modal dialog');
@@ -458,18 +476,43 @@ function closeDeviceModal() {
     document.getElementById('deviceStatus').textContent = 'Menunggu koneksi...';
 }
 
-function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl) {
-    currentDeviceName = document.querySelector(`button[onclick*="${deviceId}"]`)?.closest('.device-card')?.querySelector('.text-sm.font-medium')?.textContent || 'Perangkat IoT';
+async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl) {
+    const statusLabel = document.getElementById('deviceStatus');
+    const frame = document.getElementById('deviceFrame');
+    
     currentDeviceUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
-    const normalizedPath = streamPath.startsWith('/') ? streamPath : '/' + streamPath;
-    currentDeviceStreamUrl = `http://${deviceIp}:${devicePort}${normalizedPath}`;
-
-    document.getElementById('deviceIpOverlayLabel').textContent = `${deviceIp}:${devicePort}`;
-    document.getElementById('deviceIpInput').value = deviceIp;
-    document.getElementById('deviceStatus').textContent = 'Membuka halaman...';
-
+    
+    // Show modal with loading state
+    statusLabel.textContent = `Sedang memindai ${deviceIp}:${devicePort}...`;
+    statusLabel.className = "text-blue-400 animate-pulse";
+    frame.src = 'about:blank';
     openDeviceModal();
-    document.getElementById('deviceFrame').src = currentDeviceUrl;
+
+    // Pre-check connectivity via server
+    try {
+        const response = await fetch('/integration/check-device-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ device_id: deviceId })
+        });
+        const result = await response.json();
+        
+        if (result.success && result.status === 'online') {
+            statusLabel.textContent = 'Terhubung! Memuat antarmuka...';
+            statusLabel.className = "text-green-400";
+            setTimeout(() => {
+                frame.src = currentDeviceUrl;
+            }, 500);
+        } else {
+            statusLabel.textContent = 'Perangkat tidak merespon (Offline)';
+            statusLabel.className = "text-red-400";
+            if(confirm('Perangkat tampaknya offline. Tetap mencoba buka?')) {
+                frame.src = currentDeviceUrl;
+            }
+        }
+    } catch (error) {
+        frame.src = currentDeviceUrl;
+    }
 }
 
 function openDevicePage() {
