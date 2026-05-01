@@ -578,34 +578,35 @@ class Integration extends BaseController
         // 1. Matikan limit waktu
         set_time_limit(0);
         
-        // 2. Header anti-buffer paling agresif
-        header('X-Accel-Buffering: no'); 
-        header('Content-Type: multipart/x-mixed-replace; boundary=boundarydonotcross');
-        header('Cache-Control: no-cache, no-store, must-revalidate');
-        header('Connection: keep-alive');
+        // Matikan semua output buffering agar data tidak ditahan PHP
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: multipart/x-mixed-replace; boundary=frame');
+        header('Cache-Control: no-cache');
+        header('Connection: close');
         header('Pragma: no-cache');
 
-        if (ob_get_level()) ob_end_clean();
-
-        // High Performance Streaming Proxy
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $targetUrl);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1024 * 8); // 8KB buffer
-        curl_setopt($ch, CURLOPT_TIMEOUT, 0); 
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1024); // Buffer kecil agar cepat terkirim
         
-        // Meneruskan Content-Type secara tepat (MJPEG)
+        // Teruskan Content-Type asli dari Kamera jika ada
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $header) {
-            header($header);
+            if (stripos($header, 'Content-Type') !== false) {
+                header($header);
+            }
             return strlen($header);
         });
 
+        // Callback untuk menulis data secara real-time
         curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
             echo $data;
+            flush(); // Paksa kirim ke browser detik itu juga
             if (connection_aborted()) return 0;
-            flush();
             return strlen($data);
         });
 
