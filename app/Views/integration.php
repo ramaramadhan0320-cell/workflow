@@ -484,16 +484,26 @@ async function viewStream(deviceId, deviceIp, devicePort, streamPath, pageUrl, m
     const statusLabel = document.getElementById('deviceStatus');
     const frame = document.getElementById('deviceFrame');
     
-    // Gunakan Proxy Umum secara default (untuk dashboard HTML IoT)
-    const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
-    
-    if (mode === 'scanner') {
-        currentDeviceUrl = `/integration/scanner?ip=${deviceIp}&port=${devicePort}&path=` + encodeURIComponent(streamPath);
-    } else {
-        currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
+    // Logic: Jika port 443, ini adalah Interface Scanner berbasis Domain
+    // Kita gunakan koneksi LANGSUNG (Direct) tanpa proxy agar cepat dan stabil.
+    if (devicePort == 443 || mode === 'scanner') {
+        const protocol = devicePort == 443 ? 'https' : 'http';
+        const cleanIp = deviceIp.replace('http://', '').replace('https://', '');
+        
+        // Untuk scanner, kita gunakan jalur video murni go2rtc
+        const finalUrl = `${protocol}://${cleanIp}/api/stream.mjpeg?src=kamera_absensi`;
+        
+        if (mode === 'scanner' || devicePort == 443) {
+            // Jika ini mode scanner, kita tidak pakai iframe, tapi langsung buka di modal scanner premium
+            window.location.href = `/integration/scanner?ip=${cleanIp}&port=${devicePort}&path=/api/stream.mjpeg?src=kamera_absensi`;
+            return;
+        }
     }
     
-    // Simpan URL stream untuk keperluan internal
+    // Standard Proxy Logic untuk IoT Biasa
+    const rawUrl = pageUrl || `http://${deviceIp}:${devicePort}`;
+    currentDeviceUrl = `/integration/proxy?url=` + encodeURIComponent(rawUrl);
+    
     const normalizedPath = streamPath.startsWith('/') ? streamPath : '/' + streamPath;
     const rawStreamUrl = `http://${deviceIp}:${devicePort}${normalizedPath}`;
     currentDeviceStreamUrl = `/integration/stream?url=` + encodeURIComponent(rawStreamUrl);
@@ -1160,10 +1170,11 @@ function copyQrString() {
     async function addNewScannerSubmit(event) {
         event.preventDefault();
         const name = document.getElementById('scannerName').value.trim();
-        const url = document.getElementById('scannerUrl').value.trim();
+        let url = document.getElementById('scannerUrl').value.trim();
 
-        // Kita simpan sebagai tipe 'scanner' di database
-        // Kita gunakan IP untuk menyimpan Domain, dan Port 443 (HTTPS)
+        // Pembersihan URL: Hapus protokol jika user memasukkannya
+        url = url.replace('http://', '').replace('https://', '');
+
         try {
             const response = await fetch('/integration/add-device', {
                 method: 'POST',
@@ -1172,7 +1183,7 @@ function copyQrString() {
                     device_name: name,
                     device_ip: url,
                     device_port: 443,
-                    stream_path: '/api/stream.mjpeg?src=kamera_absensi', // Default go2rtc path
+                    stream_path: '/api/stream.mjpeg?src=kamera_absensi',
                     location: 'Scanner Interface'
                 })
             });
